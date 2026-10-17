@@ -1,17 +1,21 @@
-# Run a published image, for example as a Portainer stack.
+# Proxmox Notes as a Docker Compose project or a Portainer stack.
+# Portainer: Stacks > Add stack > Web editor, paste this file, change what you need, Deploy.
 services:
   proxmox-notes:
+    # "latest" follows every release. Use a version such as "0.9" to update only by hand.
     image: ghcr.io/snille/proxmox-notes-mcp:latest
     container_name: proxmox-notes
     restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
-      # Host names the service answers to; recommended behind a reverse proxy.
+      # Host names the service answers to, comma-separated, for example notes.example.com.
+      # Recommended behind a reverse proxy. Empty means any.
       ALLOWED_HOSTS: ""
-      # Set when the reverse proxy lets /mcp through without its own login.
+      # Set a long random value when the reverse proxy lets /mcp through without its own login.
       MCP_TOKEN: ""
     volumes:
+      # Options, Proxmox hosts (with their token secrets), snapshots and the icon library.
       - proxmox-notes-data:/data
 
 volumes:

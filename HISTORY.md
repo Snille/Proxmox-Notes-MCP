@@ -1,5 +1,12 @@
 # History
 
+## 0.9.0 - 2026-10-17
+
+- First release. The code is under the MIT licence.
+- GitHub Actions runs the tests on every push and pull request. A version tag (`v0.9.0`) also builds the image for `linux/amd64` and `linux/arm64`, pushes it to `ghcr.io/snille/proxmox-notes-mcp` (tags `latest`, `0.9.0` and `0.9`) and creates the GitHub release. The workflow stops if the tag does not match the version in `package.json`.
+- `compose.yaml` is ready to paste as a Portainer stack; the README describes how to deploy and update it.
+- The image's dependency stage runs on the build machine's own platform, so the arm64 image builds quickly under emulation. The image has OCI labels that link it to the repository.
+
 ## 0.8.1 - 2026-10-17
 
 - Uploading a folder of icons works as an import: the name comes from the file name without its size suffix (also a mistyped one such as `-512x1512`), from the icon-set list when the key is in it ("Sonarr 01") or made from the key ("deluge03" becomes "Deluge 03"). With **Replace icons with the same name** (on by default in the settings) an upload replaces the icon with that name, keeping its id and name, instead of adding a copy. A progress line shows how far a large upload has come.

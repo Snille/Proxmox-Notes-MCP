@@ -2,7 +2,7 @@
 
 A self-hosted service that creates, reads and edits the Notes (description) of Proxmox LXC containers and VMs. It has a web GUI, a REST API and an MCP server, and it replaces the browser-only [Proxmox Notes Generator](https://github.com/Snille/Proxmox-Notes).
 
-Status: **0.8.1, early development.** The Notes format, the server (REST, MCP, Docker), reading and writing Notes in Proxmox, the web GUI with its settings page (English and Swedish) and the icon library work. Icon generation with AI is not built yet.
+Status: **0.9.0, first release.** The Notes format, the server (REST, MCP, Docker), reading and writing Notes in Proxmox, the web GUI with its settings page (English and Swedish) and the icon library work, and a ready-made image is published. Icon generation with AI is not built yet.
 
 ## What it will do
 
@@ -18,7 +18,7 @@ Status: **0.8.1, early development.** The Notes format, the server (REST, MCP, D
 | Decision | Choice | Why |
 |----------|--------|-----|
 | Where it runs | Its own Docker container, one independent instance per site | Anyone can run their own copy (home, work, other people). No dependency on another service. |
-| Publishing | Public GitHub repository | Others can use it. Nothing site-specific may be in the code or the repository; it goes in configuration. |
+| Publishing | Public GitHub repository (MIT licence), image on GitHub Container Registry | Others can use it, and the image lives next to the code. Nothing site-specific may be in the code or the repository; it goes in configuration. |
 | Icons | An icon library in the service; icons are always embedded as WebP (`data:` URI). A web icon set is only an import source. | Proxmox shows embedded raster images (tested 2026-10-17), so no web server is needed. SVG cannot be embedded. See [docs/NOTES_FORMAT.md](docs/NOTES_FORMAT.md). |
 | Language | Node.js 22+, plain ES modules, Vitest | Same stack as the original generator logic, so it ports directly. |
 | Layout | One full-width HTML table with the header inside; the old Markdown layout is still read and can be chosen | It fills the Proxmox Notes panel and gets the alternating row colours (tested in Proxmox 2026-10-17). |
@@ -94,15 +94,28 @@ The browser loads the Notes format modules from `/format/`, so the preview match
 
 ## Run it
 
-With Docker Compose or as a Portainer stack, using [compose.yaml](compose.yaml):
+The image is `ghcr.io/snille/proxmox-notes-mcp`, built for `linux/amd64` and `linux/arm64` by GitHub Actions for every release. Tags: `latest`, the version (`0.9.0`) and the minor version (`0.9`).
+
+### As a Portainer stack
+
+1. **Stacks → Add stack**, name it for example `proxmox-notes`.
+2. **Web editor**: paste [compose.yaml](compose.yaml). (Or **Repository**: `https://github.com/Snille/Proxmox-Notes-MCP`, compose path `compose.yaml`.)
+3. Change the port, `ALLOWED_HOSTS` and `MCP_TOKEN` if you need to, then **Deploy the stack**.
+4. Open `http://<host>:8080/` and add a Proxmox host under **Settings → Proxmox hosts** (see [Connect a Proxmox host](#connect-a-proxmox-host)).
+
+To update, open the stack, choose **Update the stack** and turn on **Re-pull image**. The data stays in the volume.
+
+### With Docker Compose
 
 ```bash
 docker compose up -d
 ```
 
-Then open `http://<host>:8080/`. The container keeps its data (options, hosts, snapshots and the icon library) in the volume mounted at `/data`.
+Then open `http://<host>:8080/`.
 
-The published image is not set up yet (step 7). Until then, build it locally with [compose.dev.yaml](compose.dev.yaml), which serves on port 8085. It mounts `DEV_DATA_DIR` (default `private/dev-data`) at `/data` and `DEV_SECRETS_DIR` (default `private/secrets`) read-only at `/run/secrets/proxmox-notes`:
+The container keeps its data (options, hosts with their token secrets, snapshots and the icon library) in the volume mounted at `/data`. Back the volume up, and protect the backup as carefully as the tokens.
+
+To build the image from the source instead, use [compose.dev.yaml](compose.dev.yaml), which serves on port 8085. It mounts `DEV_DATA_DIR` (default `private/dev-data`) at `/data` and `DEV_SECRETS_DIR` (default `private/secrets`) read-only at `/run/secrets/proxmox-notes`:
 
 ```bash
 docker compose -f compose.dev.yaml up -d --build
@@ -154,7 +167,15 @@ npm install
 npm run check
 ```
 
-`npm run check` runs all tests. The tests include a round-trip check: every Note in `reference/examples/` is parsed and rendered again, and the result must be identical.
+`npm run check` runs all tests. The tests include a round-trip check: every Note in `reference/examples/` is parsed and rendered again, and the result must be identical. GitHub Actions runs them on every push and pull request.
+
+To release a version:
+
+1. Set the version in `package.json` (the only place it is kept) and run `npm install --package-lock-only`.
+2. Add a section `## <version> - <date>` at the top of [HISTORY.md](HISTORY.md).
+3. Commit, tag `v<version>` and push with `git push --follow-tags`.
+
+The workflow checks that the tag matches `package.json`, runs the tests, builds and pushes the image, and creates the GitHub release with the text from HISTORY.md.
 
 ## Layout
 
@@ -167,6 +188,7 @@ npm run check
 | `src/icons.mjs`, `src/dashboard-icons.mjs` | The icon library (`/data/icons`) and the dashboard-icons search |
 | `src/web/` | The web GUI: `app.js`, `settings.js`, `library.js` (icon library and picker), `preview.js` (Proxmox-like rendering and sanitizing), `icons.js` (embedding within the size limit), `i18n.js` (texts), bundled Font Awesome |
 | `test/` | Vitest tests |
+| `.github/workflows/ci.yml` | Tests on every push; image and GitHub release on a version tag |
 | `reference/examples/` | Eleven real Notes with addresses and names replaced, used as golden test files |
 | `reference/select.json` | The old generator's options file (icons, image keys, OS names) |
 | `reference/test/` | A Note with an embedded icon, used for the Proxmox display test |
@@ -179,11 +201,15 @@ npm run check
 2. ✅ Server: Docker image, configuration, REST API, MCP (HTTP and stdio).
 3. ✅ Proxmox: list guests on several hosts, read Notes, prefill from facts, write with preview, digest check and snapshot.
 4. ✅ Web GUI: guest list, editor with live preview, icons, JSON export and import, save to Proxmox, history.
-5. ✅ Settings page in the web GUI: Proxmox hosts, Notes defaults and template, icons, theme and language. The image generator settings come with icon generation (step 7).
+5. ✅ Settings page in the web GUI: Proxmox hosts, Notes defaults and template, icons, theme and language. The image generator settings come with icon generation.
 6. ✅ Icons: icon library, upload, dashboard-icons, import of a web icon set, icon picker in the editor.
-7. Icon generation: ComfyUI first, then the cloud services one at a time.
-8. Release: licence, container image built by GitHub Actions, ready-made Portainer stack.
+7. ✅ Release: MIT licence, image on GitHub Container Registry built by GitHub Actions, ready-made Portainer stack.
+8. Icon generation: ComfyUI first, then the cloud services one at a time.
 
-Open questions: the project name (this could become the next major version of `Snille/Proxmox-Notes`), and where the image is published (GitHub Container Registry or Docker Hub).
+Open question: the project name (this could become the next major version of `Snille/Proxmox-Notes`).
 
 History: [HISTORY.md](HISTORY.md).
+
+## Licence
+
+MIT, see [LICENSE](LICENSE). The bundled Font Awesome 4.7 has its own licence (font: SIL OFL 1.1, CSS: MIT).
