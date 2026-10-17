@@ -1,5 +1,10 @@
 # History
 
+## 0.5.1 - 2026-10-17
+
+- A Note without an icon no longer keeps an empty icon cell: the header spans both columns, so the title and description start at the left edge (Erik's request). The first section label cell then sets the label column to 110 px, as the icon does otherwise; without it the browser split the table width evenly between the two columns.
+- Repaired the two Font Awesome font files, which a line-ending cleanup had damaged in the previous commit, and added .gitattributes so fonts and images are always treated as binary.
+
 ## 0.5.0 - 2026-10-17
 
 - New default layout: one HTML table with `width="100%"` and the header (icon, title, description) inside, so a Note fills the Proxmox Notes panel instead of being as wide as its text. Erik chose this layout ("B") after testing two variants in Proxmox. Proxmox keeps `width` and applies its Notes table CSS to HTML tables, so the rows alternate in colour as before.
