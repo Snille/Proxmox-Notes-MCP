@@ -2,7 +2,7 @@
 
 A self-hosted service that creates, reads and edits the Notes (description) of Proxmox LXC containers and VMs. It has a web GUI, a REST API and an MCP server, and it replaces the browser-only [Proxmox Notes Generator](https://github.com/Snille/Proxmox-Notes).
 
-Status: **0.4.0, early development.** The Notes format, the server (REST, MCP, Docker), reading from Proxmox and the web GUI work. Writing to Proxmox and icon generation are not built yet: for now, copy the Markdown into Proxmox by hand.
+Status: **0.5.0, early development.** The Notes format, the server (REST, MCP, Docker), reading from Proxmox and the web GUI work. Writing to Proxmox and icon generation are not built yet: for now, copy the Markdown into Proxmox by hand.
 
 ## What it will do
 
@@ -21,6 +21,7 @@ Status: **0.4.0, early development.** The Notes format, the server (REST, MCP, D
 | Publishing | Public GitHub repository | Others can use it. Nothing site-specific may be in the code or the repository; it goes in configuration. |
 | Icons | Embedded as WebP (`data:` URI) by default, URL as an option | Proxmox shows embedded raster images (tested 2026-10-17). SVG cannot be embedded. See [docs/NOTES_FORMAT.md](docs/NOTES_FORMAT.md). |
 | Language | Node.js 22+, plain ES modules, Vitest | Same stack as the original generator logic, so it ports directly. |
+| Layout | One full-width HTML table with the header inside; the old Markdown layout is still read and can be chosen | It fills the Proxmox Notes panel and gets the alternating row colours (tested in Proxmox 2026-10-17). |
 | Data model | One JSON document per Note | The web GUI, REST, MCP and JSON export all use the same model; Markdown is rendered from it. |
 | Writes | Preview first; the old Note is saved as a snapshot before every write | A write overwrites the old text in Proxmox. The snapshot makes it reversible. |
 | Login | None in the service; put it behind a reverse proxy with authentication (for example Authelia) | One less thing to build and maintain; the proxy already does it well. |
@@ -63,7 +64,8 @@ The guests' facts come from their config: hostname, IP (static, or the DHCP addr
 
 - **Guest list**: pick a Proxmox host; every guest shows whether its Notes are in the Notes format, other text, or empty.
 - **Editor**: heading icon and title, icon image, description, notes and the sections with their rows (add, move, remove). A guest with no Notes gets a new Note filled in from the template and from Proxmox. Notes that do not follow the format open as raw text, so nothing is lost.
-- **Live preview**, rendered by the same code as the server and cleaned the way current Proxmox versions clean Notes (inline styles removed, only safe tags, attributes and URLs). A bar shows the size against the 8192-character limit, and a badge shows when the Note differs from what Proxmox has.
+- **Live preview**, rendered by the same code as the server, cleaned the way current Proxmox versions clean Notes (inline styles removed, only safe tags, attributes and URLs) and styled with Proxmox's own Notes CSS in a panel of the same fixed width. A bar shows the size against the 8192-character limit, and a badge shows when the Note differs from what Proxmox has.
+- **Layout**: full-width table (default) or the old Markdown layout. A Note stored in the other layout is converted when it is saved, and the editor says so.
 - **Icons**: choose one from the icon set, upload an image, or none. By default the icon is embedded as WebP, sized to fit the space left in the Note; untick *Embed* to link to the icon set instead.
 - **From Proxmox**: one button updates IP, MAC, DHCP and OS from the guest's config. When the IP changes, service links that pointed at the old IP move along. An exact OS release in the Note ("Debian 13") is kept when Proxmox only knows the family ("Debian").
 - **Import and export**: export a Note as JSON; import JSON from this tool or from the old Notes Generator, or Markdown. **Copy Markdown** puts the text on the clipboard for the Proxmox Notes field.
@@ -105,7 +107,7 @@ The service has no login of its own. Never expose it without a reverse proxy tha
 
 ### Options
 
-The choices in the forms (heading icons, icon-set images, OS names and the template for a new Note) are kept in `/data/options.json`. On the first start, a `select.json` from the old Notes Generator in `/data` is converted automatically. Read and save them with `GET` and `PUT /api/options`.
+The choices in the forms (layout, heading icons, icon-set images, OS names and the template for a new Note) are kept in `/data/options.json`. On the first start, a `select.json` from the old Notes Generator in `/data` is converted automatically. Read and save them with `GET` and `PUT /api/options`.
 
 ### Interfaces
 

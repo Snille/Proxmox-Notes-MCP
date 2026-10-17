@@ -31,6 +31,17 @@ export function markdownToHtml(markdown) {
   };
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    // A raw HTML block (CommonMark type 6) passes through unchanged until the next blank line.
+    if (/^\s*<\/?(?:table|thead|tbody|tr|td|th|div|p|h[1-6]|ul|ol|li|pre|blockquote|details|summary|section|article|header|footer|hr|figure)(?:[\s/>]|$)/i.test(line)) {
+      flush();
+      const block = [];
+      while (i < lines.length && lines[i].trim() !== '') {
+        block.push(lines[i]);
+        i++;
+      }
+      out.push(block.join('\n'));
+      continue;
+    }
     const heading = /^(#{1,6})\s+(.*)$/.exec(line);
     if (heading) {
       flush();

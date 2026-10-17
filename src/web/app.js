@@ -1,5 +1,7 @@
 import {
+  DEFAULT_LAYOUT,
   fromLegacyJson,
+  LAYOUTS,
   parseNotes,
   PROXMOX_DESCRIPTION_LIMIT,
   renderNotes,
@@ -19,6 +21,7 @@ const state = {
   source: null,
   facts: null,
   mode: 'form',
+  layout: DEFAULT_LAYOUT,
   doc: null,
   raw: '',
   original: null
@@ -79,6 +82,8 @@ function download(name, content, type) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+const LAYOUT_NAMES = { table: 'full-width table', markdown: 'Markdown (old generator)' };
+
 const slug = value => String(value ?? '').trim().replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'note';
 const clone = value => structuredClone(value);
 
@@ -99,7 +104,7 @@ function newDocument(fill = {}) {
 }
 
 function currentMarkdown() {
-  return state.mode === 'raw' ? state.raw : renderNotes(state.doc);
+  return state.mode === 'raw' ? state.raw : renderNotes(state.doc, { layout: state.layout });
 }
 
 function iconSetUrl(key) {
@@ -138,9 +143,16 @@ async function openGuest(guest) {
       const prefill = await api('notes_prefill', { host: state.host, vmid: guest.vmid });
       loadDocument(prefill.doc, { source, facts: result.facts, original: '', message: 'This guest has no Notes yet. A new Note was filled in from the template and from Proxmox.' });
     } else if (result.parsed.ok) {
-      const warnings = result.parsed.warnings.length ? `Read with notes: ${result.parsed.warnings.join(' ')}` : null;
-      // Compare against the Note as this tool writes it, so the added width/height is not a change.
-      loadDocument(result.parsed.doc, { source, facts: result.facts, original: renderNotes(result.parsed.doc), message: warnings });
+      const messages = [];
+      if (result.parsed.layout !== state.layout) {
+        messages.push(`These Notes use the ${LAYOUT_NAMES[result.parsed.layout]} layout; they are written in the ${LAYOUT_NAMES[state.layout]} layout when saved.`);
+      }
+      if (result.parsed.warnings.length) {
+        messages.push(`Read with notes: ${result.parsed.warnings.join(' ')}`);
+      }
+      // Compare against the Note as this tool writes it in its own layout, so small differences
+      // in how Proxmox stored it are not a change, but a change of layout is.
+      loadDocument(result.parsed.doc, { source, facts: result.facts, original: renderNotes(result.parsed.doc, { layout: result.parsed.layout }), message: messages.join(' ') || null });
     } else {
       loadRaw(result.markdown, { source, facts: result.facts, message: `These Notes do not follow the Notes format (line ${result.parsed.line}: ${result.parsed.error}). They are shown as raw text.` });
     }
@@ -303,7 +315,7 @@ function renderIcon() {
 
 // Characters left for an embedded image: the limit minus the Note without an image.
 function imageBudget() {
-  const withoutImage = renderNotes({ ...state.doc, image: { src: '', width: 1, height: 1 } }).length;
+  const withoutImage = renderNotes({ ...state.doc, image: { src: '', width: 1, height: 1 } }, { layout: state.layout }).length;
   return PROXMOX_DESCRIPTION_LIMIT - withoutImage - 64;
 }
 
@@ -559,6 +571,11 @@ function bindInputs() {
   });
   $('btnExport').addEventListener('click', exportJson);
   $('btnCopy').addEventListener('click', copyMarkdown);
+  $('layout').addEventListener('change', e => {
+    state.layout = e.target.value;
+    try { localStorage.setItem('proxmox-notes.layout', state.layout); } catch { /* storage may be blocked */ }
+    update();
+  });
 
   $('hostSelect').addEventListener('change', e => {
     state.host = e.target.value;
@@ -587,6 +604,11 @@ async function start() {
     const [status, options] = await Promise.all([api('notes_status'), fetch('/api/options').then(r => r.json())]);
     $('version').textContent = `v${status.version}`;
     state.options = options;
+    let remembered = '';
+    try { remembered = localStorage.getItem('proxmox-notes.layout') ?? ''; } catch { /* storage may be blocked */ }
+    state.layout = LAYOUTS.includes(remembered) ? remembered : LAYOUTS.includes(options.layout) ? options.layout : DEFAULT_LAYOUT;
+    $('layout').replaceChildren(...LAYOUTS.map(value => el('option', { value, text: LAYOUT_NAMES[value] })));
+    $('layout').value = state.layout;
     fillIconKeys();
     loadDocument(newDocument(), { source: null, facts: null, original: null });
     await loadHosts();

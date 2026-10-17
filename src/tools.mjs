@@ -1,5 +1,5 @@
 import * as z from 'zod';
-import { fromLegacyJson, parseNotes, PROXMOX_DESCRIPTION_LIMIT, renderNotes, SCHEMA } from './format/index.mjs';
+import { DEFAULT_LAYOUT, fromLegacyJson, LAYOUTS, parseNotes, PROXMOX_DESCRIPTION_LIMIT, renderNotes, SCHEMA } from './format/index.mjs';
 import { iconSetUrl, newDocument } from './options.mjs';
 import { applyFacts, guestFacts } from './proxmox/facts.mjs';
 import { version } from './version.mjs';
@@ -34,9 +34,13 @@ export const documentSchema = z.object({
   }))
 });
 
-function rendered(doc) {
-  const markdown = renderNotes(doc);
+const layoutSchema = z.enum(LAYOUTS).optional()
+  .describe('"table" (full-width HTML table, the default) or "markdown" (the Markdown tables of the original generator)');
+
+function rendered(doc, layout) {
+  const markdown = renderNotes(doc, { layout });
   return {
+    layout,
     markdown,
     length: markdown.length,
     limit: PROXMOX_DESCRIPTION_LIMIT,
@@ -179,8 +183,8 @@ export function buildTools({ options, proxmox }) {
       title: 'Render a Note',
       description: 'Turn a Note document into the Markdown Proxmox shows, and check it against the 8192-character limit. Nothing is written to Proxmox.',
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
-      inputSchema: z.object({ doc: documentSchema }).strict(),
-      handler: async ({ doc }) => rendered(doc)
+      inputSchema: z.object({ doc: documentSchema, layout: layoutSchema }).strict(),
+      handler: async ({ doc, layout }) => rendered(doc, layout ?? options.get().layout ?? DEFAULT_LAYOUT)
     },
     {
       name: 'notes_parse',
@@ -199,7 +203,7 @@ export function buildTools({ options, proxmox }) {
       handler: async ({ saved }) => {
         const { iconSet } = options.get();
         const doc = fromLegacyJson(saved, { imageFqdn: iconSet.baseUrl, imageWidth: iconSet.width, imageHeight: iconSet.height });
-        return { doc, ...rendered(doc) };
+        return { doc, ...rendered(doc, options.get().layout ?? DEFAULT_LAYOUT) };
       }
     }
   ];

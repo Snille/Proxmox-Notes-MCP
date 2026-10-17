@@ -1,5 +1,13 @@
 # History
 
+## 0.5.0 - 2026-10-17
+
+- New default layout: one HTML table with `width="100%"` and the header (icon, title, description) inside, so a Note fills the Proxmox Notes panel instead of being as wide as its text. Erik chose this layout ("B") after testing two variants in Proxmox. Proxmox keeps `width` and applies its Notes table CSS to HTML tables, so the rows alternate in colour as before.
+- Bold is written as `<strong>`: the Proxmox test showed that `<b>` is not bold there (the theme only styles `strong`), and Markdown is not parsed inside an HTML block. `**x**` and `<b>` in text become `<strong>`.
+- Both layouts are read. The old Markdown layout can still be chosen (`layout` in `options.json`, the `layout` argument of `notes_render`, or the choice in the web GUI). The editor says when a Note is stored in the other layout and will be converted on save.
+- The preview uses Proxmox's own Notes CSS (`.pmx-md` and the dark theme's `_markdown.scss`): alternating row colours, row lines, hover, link colour, and the fixed width of the Notes panel. It also passes raw HTML blocks through, as Markdown does.
+- Round-trip tests for the table layout against all eleven example Notes.
+
 ## 0.4.0 - 2026-10-17
 
 - The web GUI replaces the test page: a guest list per Proxmox host (with each guest's Notes state), an editor for every part of a Note, a live preview, a size bar against the 8192-character limit, and a badge when the Note differs from what Proxmox has. Notes that do not follow the format open as raw text instead of being dropped.

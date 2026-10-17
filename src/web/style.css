@@ -11,9 +11,13 @@
   --bad: #ff6b6b;
   --ok: #95c200;
   /* The preview imitates the Proxmox dark theme. */
-  --pve-bg: #262626;
-  --pve-text: #f2f2f2;
-  --pve-border: #3a3a3a;
+  --pve-bg: hsl(0deg 0% 15%);
+  --pve-text: hsl(0deg 0% 95%);
+  --pve-border: hsl(0deg 0% 25%);
+  --pve-row-border: hsl(0deg 0% 40%);
+  --pve-row-even: hsl(0deg 0% 10%);
+  --pve-row-hover: hsl(0deg 0% 30%);
+  --pve-link: hsl(205deg 100% 65%);
   color-scheme: dark;
 }
 @media (prefers-color-scheme: light) {
@@ -21,6 +25,7 @@
     --bg: #f4f6f2; --panel: #ffffff; --panel-2: #eef2ea; --text: #1b241b; --muted: #5d6e5d;
     --accent: #4f7a00; --accent-text: #ffffff; --border: #d3dccf; --warn: #9a6b00; --bad: #c62828; --ok: #4f7a00;
     --pve-bg: #ffffff; --pve-text: #000000; --pve-border: #cfcfcf;
+    --pve-row-border: #e0e0e0; --pve-row-even: #f5f5f5; --pve-row-hover: #e0e0e0; --pve-link: #3892d4;
     color-scheme: light;
   }
 }
@@ -96,6 +101,8 @@ legend { padding: 0 .35rem; color: var(--accent); font-weight: 600; }
 .preview-pane { position: sticky; top: 0; }
 .tabs { display: flex; gap: .3rem; margin-bottom: .4rem; }
 .tabs button.active { border-color: var(--accent); color: var(--accent); }
+.layout-choice { margin-left: auto; display: flex; align-items: center; gap: .4rem; color: var(--muted); font-size: 12px; }
+.layout-choice select { width: auto; }
 .markdown-out { min-height: 30rem; }
 .size { display: flex; align-items: center; gap: .6rem; margin-top: .5rem; }
 .size-bar { flex: 1; height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
@@ -103,14 +110,26 @@ legend { padding: 0 .35rem; color: var(--accent); font-weight: 600; }
 .size-bar > div.near { background: var(--warn); }
 .size-bar > div.over { background: var(--bad); }
 
-.pve-notes { background: var(--pve-bg); color: var(--pve-text); border: 1px solid var(--pve-border); border-radius: 4px; padding: 10px 14px; min-height: 12rem; overflow: auto; font: 13px/1.4 "Open Sans", "Helvetica Neue", Arial, sans-serif; }
-.pve-notes h1 { font-size: 2em; margin: .3em 0; }
-.pve-notes h3 { font-size: 1.17em; margin: .8em 0 .3em; }
-.pve-notes p { margin: .4em 0; }
-.pve-notes table { border-collapse: collapse; margin: .2em 0; }
-.pve-notes th, .pve-notes td { padding: 2px 8px 2px 0; text-align: left; vertical-align: middle; }
-.pve-notes thead th { padding: 0; height: 0; }
-.pve-notes a { color: #3892d4; text-decoration: none; }
+/* The preview copies the Notes rules of proxmox-widget-toolkit (.pmx-md in ext6-pmx.css and the
+   dark theme's _markdown.scss), and the fixed width of the Notes panel in the Proxmox summary. */
+.pve-notes {
+  width: 700px; max-width: 100%; min-height: 12rem; overflow: auto; padding: 10px;
+  background: var(--pve-bg); color: var(--pve-text); border: 1px solid var(--pve-border); border-radius: 3px;
+  font: 13px/1.4 "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+.pve-notes p { margin: .75em 0; }
+.pve-notes :is(h1, h2, h3, h4, h5, h6) { margin: .9em 0 .75em; }
+.pve-notes h1 { font-size: 175%; }
+.pve-notes h2 { font-size: 150%; }
+.pve-notes h3 { font-size: 125%; }
+.pve-notes strong, .pve-notes b { font-weight: bold; }
+.pve-notes table { border-spacing: 0; border-collapse: collapse; }
+.pve-notes td, .pve-notes th { padding: 5px; text-align: left; }
+.pve-notes tbody td { border-bottom: 1px solid var(--pve-row-border); }
+.pve-notes tbody tr:nth-of-type(even) { background-color: var(--pve-row-even); }
+.pve-notes tbody tr:last-of-type td { border-bottom: 1px solid #666666; }
+.pve-notes tbody tr:hover td { background-color: var(--pve-row-hover); }
+.pve-notes a { color: var(--pve-link); text-decoration: none; }
 .pve-notes img { vertical-align: middle; }
 
 .toast { position: fixed; right: 1rem; bottom: 1rem; max-width: min(32rem, calc(100vw - 2rem)); padding: .6rem .9rem; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--accent); box-shadow: 0 6px 24px rgb(0 0 0 / .35); }

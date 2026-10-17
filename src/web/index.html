@@ -71,7 +71,7 @@
               <legend>Text</legend>
               <label class="label">Description<textarea id="description" rows="3"></textarea></label>
               <label class="label">Notes<textarea id="notes" rows="6"></textarea></label>
-              <p class="muted small">New lines become line breaks. Simple HTML such as &lt;b&gt; works in Proxmox.</p>
+              <p class="muted small">New lines become line breaks. **bold** and &lt;b&gt; are written as &lt;strong&gt;, the only bold Proxmox shows. Other simple HTML works too.</p>
             </fieldset>
 
             <fieldset id="factsBox" hidden>
@@ -100,6 +100,7 @@
           <div class="tabs" role="tablist">
             <button type="button" role="tab" data-tab="preview" class="active">Preview</button>
             <button type="button" role="tab" data-tab="markdown">Markdown</button>
+            <label class="layout-choice">Layout <select id="layout" aria-label="Layout"></select></label>
           </div>
           <div id="preview" class="pve-notes"></div>
           <textarea id="markdownOut" class="markdown-out" rows="24" readonly spellcheck="false" hidden></textarea>

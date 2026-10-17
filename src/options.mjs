@@ -18,6 +18,8 @@ export const DEFAULT_OPTIONS = {
     { label: 'Chip', icon: 'fa-microchip' },
     { label: 'Clone', icon: 'fa-clone' }
   ],
+  // "table" (full-width HTML table) or "markdown" (the original generator's Markdown tables).
+  layout: 'table',
   // An icon set on a web server, as in the original generator: <baseUrl>/<key><width>x<height><extension>.
   iconSet: { baseUrl: '', width: 100, height: 100, extension: '.png' },
   images: [],

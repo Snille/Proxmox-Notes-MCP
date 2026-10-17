@@ -50,7 +50,66 @@ export function renderRow(row) {
   }
 }
 
-export function renderNotes(doc) {
+// "table": one HTML table, width 100%, header inside (the default since 0.5.0).
+// "markdown": the Markdown tables of the original Notes Generator.
+export const LAYOUTS = ['table', 'markdown'];
+export const DEFAULT_LAYOUT = 'table';
+
+// Inside an HTML block Markdown is not parsed, and Proxmox's CSS makes only <strong> bold
+// (its reset leaves <b> at normal weight). So **x** and <b> become <strong>.
+export function toHtmlLine(value) {
+  return toLine(value)
+    .replace(/<b>/gi, '<strong>')
+    .replace(/<\/b>/gi, '</strong>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+}
+
+function renderTableRow(row) {
+  switch (row.type) {
+    case 'field':
+      return `<strong>${toHtmlLine(row.key)}:</strong> ${toHtmlLine(row.value)}`;
+    case 'link':
+      return `<a href="${escapeAttribute(row.url)}" target="_blank" style="${LINK_STYLE}">${toHtmlLine(row.name)}</a>`;
+    case 'text':
+      return toHtmlLine(row.text);
+    default:
+      throw new Error(`Unknown row type "${row.type}"`);
+  }
+}
+
+function renderTableImage(image, title) {
+  if (!image || !image.src) {
+    return '';
+  }
+  const size = image.width && image.height ? ` width="${image.width}" height="${image.height}"` : '';
+  return `<img title="${escapeAttribute(image.title ?? title)}" src="${escapeAttribute(image.src)}" alt="${escapeAttribute(image.alt ?? IMAGE_ALT)}"${size}>`;
+}
+
+// No blank line may appear inside: a blank line ends an HTML block, and Markdown would take over.
+function renderTable(doc) {
+  const labelWidth = (doc.image?.width ?? 100) + 10;
+  const lines = [
+    '<table width="100%">',
+    `<tr><td width="${labelWidth}">${renderTableImage(doc.image, doc.title)}</td><td><h1><i class="fa ${doc.headerIcon}"></i> ${toHtmlLine(doc.title)}</h1><i class="fa ${DESCRIPTION_ICON}"></i> ${toHtmlLine(doc.description)}</td></tr>`,
+    `<tr><td colspan="2"><h3><i class="fa ${NOTES_ICON}"></i> Notes:</h3>${toHtmlLine(doc.notes)}</td></tr>`
+  ];
+  for (const section of doc.sections ?? []) {
+    section.rows.forEach((row, index) => {
+      const label = index === 0 ? `<i class="fa ${section.icon}"></i> <strong>${section.title}:</strong>` : '';
+      lines.push(`<tr><td>${label}</td><td>${renderTableRow(row)}</td></tr>`);
+    });
+  }
+  lines.push('</table>');
+  return `${lines.join('\n')}\n`;
+}
+
+export function renderNotes(doc, { layout = DEFAULT_LAYOUT } = {}) {
+  if (layout === 'table') {
+    return renderTable(doc);
+  }
+  if (layout !== 'markdown') {
+    throw new Error(`Unknown layout "${layout}"; use ${LAYOUTS.join(' or ')}`);
+  }
   const lines = [
     `# <i class="fa ${doc.headerIcon}"></i> ${toLine(doc.title)}`,
     '| | |',

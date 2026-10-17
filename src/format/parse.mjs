@@ -92,7 +92,8 @@ function sectionId(title, used) {
 }
 
 /**
- * Reads a Notes text in the generator format into a document.
+ * Reads a Notes text into a document: the full-width table layout, or the Markdown tables of
+ * the original generator. A successful result says which layout it was.
  * Content that does not fit the format is never dropped: the result is { ok: false } instead,
  * so a caller can fall back to editing the raw text.
  */
@@ -101,7 +102,109 @@ export function parseNotes(markdown) {
   while (lines.length && lines.at(-1).trim() === '') {
     lines.pop();
   }
-  const fail = (index, error) => ({ ok: false, error, line: index + 1 });
+  const layout = TABLE_START.test(lines[0] ?? '') ? 'table' : 'markdown';
+  const result = layout === 'table' ? parseTableLayout(lines) : parseMarkdownLayout(lines);
+  return result.ok ? { ...result, layout } : result;
+}
+
+const fail = (index, error) => ({ ok: false, error, line: index + 1 });
+
+const TABLE_START = /^<table\b[^>]*>\s*$/i;
+const TABLE_END = /^<\/table>\s*$/i;
+const TABLE_ROW = /^<tr>(.*)<\/tr>$/is;
+const TABLE_CELL = /<td\b[^>]*>(.*?)<\/td>/gis;
+const TABLE_HEADER = /^<h1><i class="fa ([^"]+)"><\/i>\s?(.*?)<\/h1>(.*)$/is;
+const TABLE_NOTES = /^<h3>.*?Notes:\s*<\/h3>(.*)$/is;
+const TABLE_LABEL = /^<i class="fa ([^"]+)"><\/i>\s*<(strong|b)>(.+?):<\/\2>$/is;
+const TABLE_FIELD = /^<(strong|b)>(.+?):<\/\1>\s?(.*)$/is;
+
+function cellsOf(line) {
+  const row = TABLE_ROW.exec(String(line ?? '').trim());
+  return row ? [...row[1].matchAll(TABLE_CELL)].map(match => match[1].trim()) : null;
+}
+
+function parseTableRow(content) {
+  const field = TABLE_FIELD.exec(content);
+  if (field) {
+    return { type: 'field', key: fromLine(field[2]), value: fromLine(field[3]) };
+  }
+  const link = LINK.exec(content);
+  if (link) {
+    return { type: 'link', name: fromLine(link[2]), url: unescapeAttribute(link[1]) };
+  }
+  return { type: 'text', text: fromLine(content) };
+}
+
+// The full-width table layout (see render.mjs). As for Markdown, anything that does not fit
+// is reported with its line, never dropped.
+function parseTableLayout(lines) {
+  const warnings = [];
+  const last = lines.length - 1;
+  if (!TABLE_END.test(lines[last] ?? '')) {
+    return fail(last, 'The table does not end with </table> on its own line');
+  }
+  const top = cellsOf(lines[1]);
+  if (!top || top.length !== 2) {
+    return fail(1, 'The first row is not an icon cell and a heading cell');
+  }
+  const header = TABLE_HEADER.exec(top[1]);
+  if (!header) {
+    return fail(1, 'The heading cell does not start with <h1><i class="fa ..."></i> Title</h1>');
+  }
+  if (!DESCRIPTION_PREFIX.test(header[3])) {
+    warnings.push(`Line 2: the description has no ${DESCRIPTION_ICON} icon; it is added when saved`);
+  }
+  const doc = {
+    schema: SCHEMA,
+    headerIcon: header[1],
+    title: fromLine(header[2]),
+    image: null,
+    description: fromLine(header[3].replace(DESCRIPTION_PREFIX, '')),
+    notes: '',
+    sections: []
+  };
+  if (top[0] !== '') {
+    const parsed = parseImage(top[0]);
+    if (!parsed) {
+      return fail(1, 'The icon cell is not an <img> with a src');
+    }
+    doc.image = parsed.image;
+    if (parsed.title !== undefined && parsed.title !== doc.title) {
+      doc.image.title = parsed.title;
+    }
+  }
+
+  const notesRow = cellsOf(lines[2]);
+  const notes = notesRow?.length === 1 ? TABLE_NOTES.exec(notesRow[0]) : null;
+  if (!notes) {
+    return fail(2, 'The second row is not the "Notes:" row');
+  }
+  doc.notes = fromLine(notes[1]);
+
+  const used = new Set();
+  let current = null;
+  for (let i = 3; i < last; i++) {
+    const cells = cellsOf(lines[i]);
+    if (!cells || cells.length !== 2) {
+      return fail(i, 'Expected a row with a label cell and a value cell');
+    }
+    const [label, content] = cells;
+    if (label !== '') {
+      const match = TABLE_LABEL.exec(label);
+      if (!match) {
+        return fail(i, 'The label cell is not "<i class="fa ..."></i> <strong>Title:</strong>"');
+      }
+      current = { id: sectionId(match[3], used), title: match[3], icon: match[1], rows: [] };
+      doc.sections.push(current);
+    } else if (!current) {
+      return fail(i, 'A row comes before the first section label');
+    }
+    current.rows.push(parseTableRow(content));
+  }
+  return { ok: true, doc, warnings };
+}
+
+function parseMarkdownLayout(lines) {
   const warnings = [];
   let i = 0;
 

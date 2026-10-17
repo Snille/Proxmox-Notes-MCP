@@ -1,6 +1,11 @@
 # Notes format
 
-This is the reference for the text this service writes into a Proxmox guest's Notes. It matches the output of the original Notes Generator (`notes/script/notes-generator.js` in `Snille/Proxmox-Notes`), with one deliberate addition: `width` and `height` attributes on the icon.
+This is the reference for the text this service writes into a Proxmox guest's Notes. There are two layouts:
+
+- **table** (the default since 0.5.0): one HTML table, `width="100%"`, with the header inside. It fills the Notes panel and gets Proxmox's alternating row colours.
+- **markdown**: the Markdown tables of the original Notes Generator (`notes/script/notes-generator.js` in `Snille/Proxmox-Notes`), with one deliberate addition: `width` and `height` attributes on the icon.
+
+Both are read; a Note is written in the instance's layout (`layout` in `options.json`, or the choice in the web GUI).
 
 ## The document model
 
@@ -27,7 +32,26 @@ Every interface (web GUI, REST, MCP, JSON export) works on one JSON document. Ma
 - A row is `field` (`**Key:** value`), `link` (a green service link) or `text` (any other cell content, kept as it is).
 - `image` may be `null`. `image.src` is either an `https://` URL or an embedded `data:image/...;base64,` image. `image.key` (for example `sonarr01-`) is kept when the URL follows the icon-set naming, so a form can show which icon is selected.
 
-## The Markdown
+## The table layout
+
+```
+<table width="100%">
+<tr><td width="110"><img title="{title}" src="{src}" alt="[Icon]" width="100" height="100"></td><td><h1><i class="fa {headerIcon}"></i> {title}</h1><i class="fa fa-file-text-o"></i> {description}</td></tr>
+<tr><td colspan="2"><h3><i class="fa fa-sticky-note-o"></i> Notes:</h3>{notes}</td></tr>
+<tr><td><i class="fa fa-exclamation-circle fa-fw"></i> <strong>Creation:</strong></td><td><strong>Date:</strong> 2026-10-17</td></tr>
+<tr><td></td><td><strong>Owner:</strong> Jane Doe</td></tr>
+<tr><td><i class="fa fa-cogs"></i> <strong>Services:</strong></td><td><a href="http://192.0.2.36:8989" target="_blank" style="text-decoration: none; color: #00f000;">Sonarr</a></td></tr>
+</table>
+```
+
+Rules:
+
+- One row per line and **no blank line** inside: a blank line ends an HTML block, and Markdown would take over.
+- The first column is the icon width plus 10 px, so the section labels line up under the icon.
+- Bold is `<strong>`: Proxmox's CSS makes only `<strong>` bold, and Markdown (`**x**`) is not parsed inside an HTML block. `**x**` and `<b>` in text are written as `<strong>`.
+- Proxmox's table CSS (`.pmx-md tbody tr:nth-of-type(even)`) applies to every row, so the rows alternate in colour. Tested in Proxmox on 2026-10-17: the table fills the panel and the rows alternate.
+
+## The Markdown layout
 
 ```
 # <i class="fa {headerIcon}"></i> {title}
@@ -60,8 +84,10 @@ Checked in the Proxmox source on 2026-10-17 (`proxmox-widget-toolkit` `src/Parse
 - `<img src>` may be `http(s)://` or `data:image/png|gif|jpeg|webp|bmp|x-icon`. An embedded raster image works without a web server.
 - SVG does not work embedded: the `<svg>` tag is shown as text and `data:image/svg+xml` is blocked. SVG only works from an `http(s)` URL.
 - Font Awesome 4 classes work, because `class` is kept.
+- `<b>` is not bold: the theme's reset leaves it at normal weight, and only `.pmx-md strong` is set to bold.
+- A raw HTML table works. Its `width="100%"` is kept, and the Notes table CSS applies to it as to a Markdown table.
 
-Size budget: a 100×100 icon as WebP quality 75 is about 3.2 KB, 4.3 KB as base64. A Notes text without the icon is 1.3–2.0 KB. Together that is about 6 KB, which fits.
+Size budget: a 100×100 icon as WebP is about 3.4 KB as base64. A Note without the icon is 1.3–2.0 KB in the Markdown layout and 1.9–2.6 KB in the table layout. Together that is about 6 KB, which fits; the editor lowers the WebP quality when space is short.
 
 ## How Proxmox stores it
 
