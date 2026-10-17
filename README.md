@@ -154,10 +154,11 @@ npm run check
 1. ✅ Notes format: document model, render, parse, round-trip tests.
 2. ✅ Server: Docker image, configuration, REST API, MCP (HTTP and stdio).
 3. Proxmox: ✅ list guests on several hosts, read Notes, prefill from facts. Next: write with preview and snapshot.
-4. Web GUI: ✅ guest list, editor with live preview, icons, JSON export and import. Next: save to Proxmox, and an options editor (replaces `select.json`).
-5. Icons: icon library, embed from file or URL, dashboard-icons.
-6. Icon generation: ComfyUI first, then the cloud services one at a time.
-7. Release: licence, container image built by GitHub Actions, ready-made Portainer stack.
+4. Web GUI: ✅ guest list, editor with live preview, icons, JSON export and import. Next: save to Proxmox.
+5. Settings page in the web GUI: Proxmox hosts (add, test, remove; token secrets are written but never shown again), layout, theme (dark, light, follow the system), language (English, Swedish), image generator (ComfyUI URL and workflow, or a cloud service and its key), and the form options and template (replaces `select.json`).
+6. Icons: icon library, embed from file or URL, dashboard-icons.
+7. Icon generation: ComfyUI first, then the cloud services one at a time.
+8. Release: licence, container image built by GitHub Actions, ready-made Portainer stack.
 
 Open questions: the project name (this could become the next major version of `Snille/Proxmox-Notes`), and where the image is published (GitHub Container Registry or Docker Hub).
 
