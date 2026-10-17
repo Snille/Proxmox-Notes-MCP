@@ -1,5 +1,13 @@
 # History
 
+## 0.6.0 - 2026-10-17
+
+- Write Notes to Proxmox, in two steps. `notes_prepare_write` returns the current and the new text and a single-use confirmation (10 minutes); `notes_write_confirmed` writes only with it. Before writing, the config is read again and the write stops if its `digest` changed; the digest is also sent with the write, so Proxmox itself refuses it if the config changed in between. Only `description` is sent, and the stored text is read back and compared.
+- Every write first keeps the current Notes as a snapshot in `/data/snapshots/<host>/<vmid>/`. New tools `notes_snapshots` and `notes_snapshot`; in the web GUI, **History** lists them and loads one into the editor, so a restore is an ordinary save.
+- The web GUI's **Save to Proxmox** opens a dialog with the Notes now in Proxmox and the Notes to be written side by side, rendered as Proxmox shows them.
+- The role is now `ProxmoxNotesEditor` (`VM.Audit` and `VM.Config.Options` on `/vms`). Checked in the Proxmox source: `description` needs `VM.Config.Options` for both LXC and VM, and no narrower privilege exists.
+- Tested on a real host: a change was written to a test container, checked with `pct config`, and the original was put back from History.
+
 ## 0.5.1 - 2026-10-17
 
 - A Note without an icon no longer keeps an empty icon cell: the header spans both columns, so the title and description start at the left edge (Erik's request). The first section label cell then sets the label column to 110 px, as the icon does otherwise; without it the browser split the table width evenly between the two columns.

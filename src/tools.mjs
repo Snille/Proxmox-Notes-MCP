@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import * as z from 'zod';
 import { DEFAULT_LAYOUT, fromLegacyJson, LAYOUTS, parseNotes, PROXMOX_DESCRIPTION_LIMIT, renderNotes, SCHEMA } from './format/index.mjs';
 import { iconSetUrl, newDocument } from './options.mjs';
@@ -70,7 +71,28 @@ async function readGuest(proxmox, host, vmid) {
   return { guest, config, facts };
 }
 
-export function buildTools({ options, proxmox }) {
+// Proxmox may store the text without the final newline; compare without trailing whitespace.
+const sameText = (a, b) => String(a ?? '').replace(/\r\n?/g, '\n').trimEnd() === String(b ?? '').replace(/\r\n?/g, '\n').trimEnd();
+
+const CONFIRMATION_TTL_MS = 10 * 60 * 1000;
+
+function log(event) {
+  console.log(JSON.stringify({ level: 'info', time: new Date().toISOString(), ...event }));
+}
+
+export function buildTools({ options, proxmox, snapshots }) {
+  // Single-use confirmations from notes_prepare_write, kept in memory only.
+  const confirmations = new Map();
+  const takeConfirmation = id => {
+    const now = Date.now();
+    for (const [key, value] of confirmations) {
+      if (value.expiresAt < now) confirmations.delete(key);
+    }
+    const found = confirmations.get(id);
+    confirmations.delete(id);
+    return found ?? null;
+  };
+
   return [
     {
       name: 'notes_status',
@@ -176,6 +198,102 @@ export function buildTools({ options, proxmox }) {
           }
         }
         return { host, guest, facts, doc };
+      }
+    },
+    {
+      name: 'notes_prepare_write',
+      title: 'Prepare writing a Note',
+      description: 'Step 1 of 2 for writing Notes to a guest. Give the new Notes as a document (rendered in the instance layout unless layout is set) or as raw Markdown. Returns the current and the new text, whether anything changes, the size check, and a single-use confirmation that is valid for 10 minutes. Nothing is written. Show the change to the user and get explicit approval before calling notes_write_confirmed.',
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      inputSchema: z.object({
+        host: hostSchema,
+        vmid: vmidSchema,
+        doc: documentSchema.optional(),
+        layout: layoutSchema,
+        markdown: z.string().optional().describe('Raw Notes text, used instead of doc')
+      }).strict().refine(a => (a.doc ? 1 : 0) + (a.markdown !== undefined ? 1 : 0) === 1, 'Give either doc or markdown'),
+      handler: async ({ host, vmid, doc, layout, markdown }) => {
+        const next = doc ? renderNotes(doc, { layout: layout ?? options.get().layout ?? DEFAULT_LAYOUT }) : markdown;
+        if (next.length > PROXMOX_DESCRIPTION_LIMIT) {
+          throw Object.assign(new Error(`The Notes are ${next.length} characters; Proxmox allows ${PROXMOX_DESCRIPTION_LIMIT}`), { statusCode: 400 });
+        }
+        const client = proxmox.client(host);
+        const guest = await client.guest(vmid);
+        const config = await client.config(guest);
+        const current = config.description ?? '';
+        const changed = !sameText(current, next);
+        let confirmation = null;
+        let expiresAt = null;
+        if (changed) {
+          confirmation = randomBytes(16).toString('hex');
+          expiresAt = Date.now() + CONFIRMATION_TTL_MS;
+          confirmations.set(confirmation, { host, vmid: guest.vmid, next, digest: config.digest, expiresAt });
+        }
+        return {
+          host,
+          guest,
+          changed,
+          current,
+          next,
+          length: next.length,
+          limit: PROXMOX_DESCRIPTION_LIMIT,
+          confirmation,
+          expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null
+        };
+      }
+    },
+    {
+      name: 'notes_write_confirmed',
+      title: 'Write a Note',
+      description: 'Step 2 of 2: write the Notes prepared by notes_prepare_write, after the user approved them. The current Notes are saved as a snapshot first. Fails, and writes nothing, if the guest config changed since the preview.',
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+      inputSchema: z.object({ confirmation: z.string().regex(/^[0-9a-f]{32}$/) }).strict(),
+      handler: async ({ confirmation }) => {
+        const pending = takeConfirmation(confirmation);
+        if (!pending) {
+          throw Object.assign(new Error('Unknown, used or expired confirmation; prepare the write again'), { statusCode: 409 });
+        }
+        const client = proxmox.client(pending.host);
+        const guest = await client.guest(pending.vmid);
+        const config = await client.config(guest);
+        if (config.digest !== pending.digest) {
+          throw Object.assign(new Error('The guest config changed since the preview; nothing was written. Prepare the write again.'), { statusCode: 409 });
+        }
+        const snapshot = await snapshots.save({
+          host: pending.host,
+          vmid: guest.vmid,
+          name: guest.name,
+          description: config.description ?? '',
+          digest: config.digest,
+          reason: 'before write'
+        });
+        await client.setDescription(guest, pending.next, pending.digest);
+        const stored = (await client.config(guest)).description ?? '';
+        const verified = sameText(stored, pending.next);
+        log({ message: 'notes written', host: pending.host, vmid: guest.vmid, length: pending.next.length, snapshot: snapshot.id, verified });
+        if (!verified) {
+          throw Object.assign(new Error(`Proxmox accepted the write, but the stored Notes differ from what was sent. The previous Notes are in snapshot ${snapshot.id}.`), { statusCode: 502 });
+        }
+        return { written: true, host: pending.host, vmid: guest.vmid, length: pending.next.length, snapshot: snapshot.id };
+      }
+    },
+    {
+      name: 'notes_snapshots',
+      title: 'Snapshots of a guest\'s Notes',
+      description: 'List the snapshots kept for one guest, newest first. A snapshot is the Notes as they were just before a write.',
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({ host: hostSchema, vmid: vmidSchema }).strict(),
+      handler: async ({ host, vmid }) => ({ host, vmid, snapshots: await snapshots.list(host, vmid) })
+    },
+    {
+      name: 'notes_snapshot',
+      title: 'Read a snapshot',
+      description: 'Read one snapshot: the Notes text and the parsed document. To restore it, pass its text to notes_prepare_write as markdown.',
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({ host: hostSchema, vmid: vmidSchema, id: z.string() }).strict(),
+      handler: async ({ host, vmid, id }) => {
+        const snapshot = await snapshots.read(host, vmid, id);
+        return { ...snapshot, parsed: snapshot.description.trim() ? parseNotes(snapshot.description) : null };
       }
     },
     {

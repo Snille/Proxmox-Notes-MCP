@@ -7,6 +7,7 @@ import { loadSettings } from '../src/config.mjs';
 import { OptionsStore } from '../src/options.mjs';
 import { createNotesServer } from '../src/server.mjs';
 import { Proxmox } from '../src/proxmox/index.mjs';
+import { SnapshotStore } from '../src/snapshots.mjs';
 import { buildTools } from '../src/tools.mjs';
 import { version } from '../src/version.mjs';
 
@@ -20,7 +21,7 @@ async function start(env = {}, prepare) {
   }
   const settings = loadSettings({ DATA_DIR: dataDir, ...env });
   const options = await OptionsStore.open(dataDir);
-  server = createNotesServer({ settings, options, tools: buildTools({ options, proxmox: new Proxmox([]) }) });
+  server = createNotesServer({ settings, options, tools: buildTools({ options, proxmox: new Proxmox([]), snapshots: new SnapshotStore(dataDir) }) });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   return { base: `http://127.0.0.1:${server.address().port}`, dataDir };
 }
@@ -120,7 +121,7 @@ describe('MCP', () => {
     const client = new Client({ name: 'test', version: '1.0.0' });
     await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/mcp`)));
     const { tools } = await client.listTools();
-    expect(tools.map(t => t.name).sort()).toEqual(['notes_guests', 'notes_hosts', 'notes_import_legacy', 'notes_new', 'notes_options', 'notes_parse', 'notes_prefill', 'notes_read', 'notes_render', 'notes_status']);
+    expect(tools.map(t => t.name).sort()).toEqual(['notes_guests', 'notes_hosts', 'notes_import_legacy', 'notes_new', 'notes_options', 'notes_parse', 'notes_prefill', 'notes_prepare_write', 'notes_read', 'notes_render', 'notes_snapshot', 'notes_snapshots', 'notes_status', 'notes_write_confirmed']);
     const result = await client.callTool({ name: 'notes_new', arguments: { title: 'Test' } });
     expect(result.structuredContent.doc.title).toBe('Test');
     await client.close();
@@ -135,7 +136,7 @@ describe('MCP', () => {
     await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/mcp`), {
       requestInit: { headers: { authorization: 'Bearer test-token-not-secret' } }
     }));
-    expect((await client.listTools()).tools.length).toBe(10);
+    expect((await client.listTools()).tools.length).toBe(14);
     await client.close();
   });
 });

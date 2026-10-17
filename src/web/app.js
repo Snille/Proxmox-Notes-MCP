@@ -273,6 +273,100 @@ function renderContext() {
     label.textContent = 'Not linked to a guest. Export it as JSON or copy the Markdown.';
     label.classList.add('muted');
   }
+  $('btnSave').disabled = !state.source;
+  $('btnSave').title = state.source ? `Write these Notes to ${state.source.name} (a preview comes first)` : 'Open a guest to save its Notes';
+  $('btnHistory').hidden = !state.source;
+}
+
+// ---------- saving to Proxmox ----------
+
+let pendingWrite = null;
+
+async function openSaveDialog() {
+  if (!state.source) return;
+  const markdown = currentMarkdown();
+  try {
+    const prepared = await api('notes_prepare_write', { host: state.source.host, vmid: state.source.vmid, markdown });
+    if (!prepared.changed) {
+      toast('Proxmox already has exactly these Notes. Nothing to save.');
+      return;
+    }
+    pendingWrite = prepared;
+    const target = `${state.source.type === 'lxc' ? 'CT' : 'VM'} ${prepared.guest.vmid} (${prepared.guest.name}) on ${state.source.host}`;
+    $('saveSummary').textContent = `Write ${prepared.length} of ${prepared.limit} characters to ${target}.`;
+    $('saveCurrent').replaceChildren(prepared.current.trim() ? renderPreview(prepared.current) : el('p', { class: 'muted', text: '(empty)' }));
+    $('saveNext').replaceChildren(renderPreview(prepared.next));
+    $('saveConfirm').disabled = false;
+    $('saveDialog').showModal();
+  } catch (error) {
+    toast(error.message, 'bad');
+  }
+}
+
+async function confirmSave() {
+  if (!pendingWrite) return;
+  $('saveConfirm').disabled = true;
+  try {
+    const result = await api('notes_write_confirmed', { confirmation: pendingWrite.confirmation });
+    state.original = pendingWrite.next;
+    pendingWrite = null;
+    $('saveDialog').close();
+    banner(null);
+    update();
+    toast(`Saved to ${state.source.name}. The previous Notes are kept as snapshot ${result.snapshot}.`);
+    const guest = state.guests.find(g => g.vmid === result.vmid);
+    if (guest && state.host === result.host) {
+      guest.notes = state.mode === 'form' ? 'format' : 'other';
+      guest.noteTitle = state.mode === 'form' ? state.doc.title : '';
+      renderGuests();
+    }
+  } catch (error) {
+    pendingWrite = null;
+    $('saveDialog').close();
+    toast(error.message, 'bad');
+  }
+}
+
+// ---------- history ----------
+
+async function openHistory() {
+  if (!state.source) return;
+  const source = state.source;
+  const list = $('historyList');
+  list.replaceChildren(el('li', { class: 'muted', text: 'Loading…' }));
+  $('historyDialog').showModal();
+  try {
+    const { snapshots } = await api('notes_snapshots', { host: source.host, vmid: source.vmid });
+    list.replaceChildren();
+    if (!snapshots.length) {
+      list.append(el('li', { class: 'muted', text: 'No snapshots yet. One is kept every time these Notes are saved from here.' }));
+    }
+    for (const snapshot of snapshots) {
+      list.append(el('li', {}, [
+        el('span', { class: 'when', text: new Date(snapshot.takenAt).toLocaleString() }),
+        el('span', { class: 'muted small', text: `${snapshot.length} characters` }),
+        el('button', { type: 'button', class: 'small', text: 'Load into editor', onclick: () => loadSnapshot(source, snapshot.id) })
+      ]));
+    }
+  } catch (error) {
+    list.replaceChildren(el('li', { class: 'muted', text: error.message }));
+  }
+}
+
+async function loadSnapshot(source, id) {
+  try {
+    const snapshot = await api('notes_snapshot', { host: source.host, vmid: source.vmid, id });
+    $('historyDialog').close();
+    const when = new Date(snapshot.takenAt).toLocaleString();
+    const message = `Loaded the snapshot from ${when}. Save to put it back in Proxmox.`;
+    if (snapshot.parsed?.ok) {
+      loadDocument(snapshot.parsed.doc, { original: state.original, message });
+    } else {
+      loadRaw(snapshot.description, { original: state.original, message });
+    }
+  } catch (error) {
+    toast(error.message, 'bad');
+  }
 }
 
 // ---------- preview, size and dirty state ----------
@@ -571,6 +665,11 @@ function bindInputs() {
   });
   $('btnExport').addEventListener('click', exportJson);
   $('btnCopy').addEventListener('click', copyMarkdown);
+  $('btnSave').addEventListener('click', openSaveDialog);
+  $('saveConfirm').addEventListener('click', confirmSave);
+  $('saveCancel').addEventListener('click', () => { pendingWrite = null; $('saveDialog').close(); });
+  $('btnHistory').addEventListener('click', openHistory);
+  $('historyClose').addEventListener('click', () => $('historyDialog').close());
   $('layout').addEventListener('change', e => {
     state.layout = e.target.value;
     try { localStorage.setItem('proxmox-notes.layout', state.layout); } catch { /* storage may be blocked */ }

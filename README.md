@@ -2,7 +2,7 @@
 
 A self-hosted service that creates, reads and edits the Notes (description) of Proxmox LXC containers and VMs. It has a web GUI, a REST API and an MCP server, and it replaces the browser-only [Proxmox Notes Generator](https://github.com/Snille/Proxmox-Notes).
 
-Status: **0.5.1, early development.** The Notes format, the server (REST, MCP, Docker), reading from Proxmox and the web GUI work. Writing to Proxmox and icon generation are not built yet: for now, copy the Markdown into Proxmox by hand.
+Status: **0.6.0, early development.** The Notes format, the server (REST, MCP, Docker), reading and writing Notes in Proxmox, and the web GUI work. The settings page and icon generation are not built yet.
 
 ## What it will do
 
@@ -28,22 +28,35 @@ Status: **0.5.1, early development.** The Notes format, the server (REST, MCP, D
 
 ## Connect a Proxmox host
 
-Each Proxmox host gets its own user and API token. Run this on the Proxmox host as root. It creates a role that may only read, a user that cannot log in, and a token:
+Each Proxmox host gets its own user and API token. Run this on the Proxmox host as root. It creates a role, a user that cannot log in, and a token:
 
 ```bash
-pveum role add ProxmoxNotesReader -privs VM.Audit
+pveum role add ProxmoxNotesEditor -privs VM.Audit,VM.Config.Options
 pveum user add proxmox-notes@pve -comment 'Proxmox Notes service'
-pveum acl modify /vms -user proxmox-notes@pve -role ProxmoxNotesReader
+pveum acl modify /vms -user proxmox-notes@pve -role ProxmoxNotesEditor
 pveum user token add proxmox-notes@pve notes -privsep 1 -comment 'Proxmox Notes service'
-pveum acl modify /vms -token 'proxmox-notes@pve!notes' -role ProxmoxNotesReader
+pveum acl modify /vms -token 'proxmox-notes@pve!notes' -role ProxmoxNotesEditor
 ```
 
 `pveum user token add` shows the token secret once. Save it in a file, for example as a Docker secret. The token has privilege separation (`-privsep 1`), so it needs its own ACL as well as the user's.
 
 | Privilege | Needed for |
 |-----------|-----------|
-| `VM.Audit` | List guests and read their config and Notes (enough for now) |
-| `VM.Config.Options` | Write the Notes (`description`); added when writing is built |
+| `VM.Audit` | List guests and read their config and Notes |
+| `VM.Config.Options` | Write the Notes (`description`). Leave it out for a read-only instance. |
+
+`VM.Config.Options` is the narrowest privilege Proxmox has for the description, but it also covers other general options (name, onboot, OS type and similar). The service only ever sends `description`.
+
+### Writing
+
+A write takes two steps. `notes_prepare_write` reads the guest's config and returns the current text, the new text and a single-use confirmation (valid 10 minutes); the web GUI shows both side by side. `notes_write_confirmed` then:
+
+1. reads the config again and stops if it changed since the preview (Proxmox's config `digest`);
+2. saves the current Notes as a snapshot in `/data/snapshots/<host>/<vmid>/`;
+3. sends only `description`, with the digest, so Proxmox itself refuses the write if the config changed in between;
+4. reads the Notes back and checks that Proxmox stored exactly what was sent.
+
+Snapshots are never deleted automatically. **History** in the web GUI (or `notes_snapshots` and `notes_snapshot`) lists them; loading one puts it in the editor, and saving writes it back.
 
 Then list the host in `/data/targets.json` (see [targets.example.json](targets.example.json)):
 
@@ -69,7 +82,7 @@ The guests' facts come from their config: hostname, IP (static, or the DHCP addr
 - **Icons**: choose one from the icon set, upload an image, or none. By default the icon is embedded as WebP, sized to fit the space left in the Note; untick *Embed* to link to the icon set instead.
 - **From Proxmox**: one button updates IP, MAC, DHCP and OS from the guest's config. When the IP changes, service links that pointed at the old IP move along. An exact OS release in the Note ("Debian 13") is kept when Proxmox only knows the family ("Debian").
 - **Import and export**: export a Note as JSON; import JSON from this tool or from the old Notes Generator, or Markdown. **Copy Markdown** puts the text on the clipboard for the Proxmox Notes field.
-- **Save to Proxmox** is not built yet (next step).
+- **Save to Proxmox**: a dialog shows the Notes now in Proxmox and the Notes that will be written, side by side, before anything is written. **History** lists the snapshots kept before each save.
 
 The browser loads the Notes format modules from `/format/`, so the preview matches what the server renders. Font Awesome 4.7 is bundled (font: SIL OFL 1.1, CSS: MIT; see `src/web/vendor/font-awesome/LICENSE.txt`), because Proxmox uses that version for the icons in Notes.
 
@@ -122,7 +135,7 @@ The choices in the forms (layout, heading icons, icon-set images, OS names and t
 
 MCP over stdio, for an assistant on the same machine: `node src/stdio.mjs`.
 
-Tools: `notes_status`, `notes_options`, `notes_hosts`, `notes_guests`, `notes_read`, `notes_prefill`, `notes_new`, `notes_render`, `notes_parse`, `notes_import_legacy`. None of them write to Proxmox yet.
+Tools: `notes_status`, `notes_options`, `notes_hosts`, `notes_guests`, `notes_read`, `notes_prefill`, `notes_new`, `notes_render`, `notes_parse`, `notes_import_legacy`, `notes_prepare_write`, `notes_write_confirmed`, `notes_snapshots`, `notes_snapshot`. Only `notes_write_confirmed` writes to Proxmox, and only with a confirmation from `notes_prepare_write`.
 
 ## Development
 
@@ -153,8 +166,8 @@ npm run check
 
 1. ✅ Notes format: document model, render, parse, round-trip tests.
 2. ✅ Server: Docker image, configuration, REST API, MCP (HTTP and stdio).
-3. Proxmox: ✅ list guests on several hosts, read Notes, prefill from facts. Next: write with preview and snapshot.
-4. Web GUI: ✅ guest list, editor with live preview, icons, JSON export and import. Next: save to Proxmox.
+3. ✅ Proxmox: list guests on several hosts, read Notes, prefill from facts, write with preview, digest check and snapshot.
+4. ✅ Web GUI: guest list, editor with live preview, icons, JSON export and import, save to Proxmox, history.
 5. Settings page in the web GUI: Proxmox hosts (add, test, remove; token secrets are written but never shown again), layout, theme (dark, light, follow the system), language (English, Swedish), image generator (ComfyUI URL and workflow, or a cloud service and its key), and the form options and template (replaces `select.json`).
 6. Icons: icon library, embed from file or URL, dashboard-icons.
 7. Icon generation: ComfyUI first, then the cloud services one at a time.

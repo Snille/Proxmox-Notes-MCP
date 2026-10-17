@@ -17,7 +17,7 @@
       <label class="button" title="Import a Note from JSON (this tool or the old Notes Generator) or Markdown"><i class="fa fa-upload"></i> Import<input id="fileImport" type="file" accept=".json,.md,.txt,application/json,text/markdown,text/plain" hidden></label>
       <button id="btnExport" type="button" title="Download the Note as JSON"><i class="fa fa-download"></i> Export JSON</button>
       <button id="btnCopy" type="button" title="Copy the Markdown for the Proxmox Notes field"><i class="fa fa-clipboard"></i> Copy Markdown</button>
-      <button id="btnSave" type="button" class="primary" disabled title="Writing to Proxmox is not built yet"><i class="fa fa-floppy-o"></i> Save to Proxmox</button>
+      <button id="btnSave" type="button" class="primary" disabled title="Open a guest to save its Notes"><i class="fa fa-floppy-o"></i> Save to Proxmox</button>
     </div>
   </header>
 
@@ -38,6 +38,7 @@
       <div class="context">
         <span id="contextLabel" class="muted">No guest selected. Pick one on the left, or start a new Note.</span>
         <span id="dirty" class="badge warn" hidden>Changed</span>
+        <button id="btnHistory" type="button" class="small" hidden title="Earlier versions of these Notes, kept before each save"><i class="fa fa-history"></i> History</button>
       </div>
 
       <div class="columns">
@@ -113,6 +114,35 @@
       </div>
     </main>
   </div>
+
+  <dialog id="saveDialog" class="dialog" aria-labelledby="saveTitle">
+    <h2 id="saveTitle"><i class="fa fa-floppy-o"></i> Save to Proxmox</h2>
+    <p id="saveSummary"></p>
+    <div class="compare">
+      <section>
+        <h3>Now in Proxmox</h3>
+        <div id="saveCurrent" class="pve-notes"></div>
+      </section>
+      <section>
+        <h3>Will be written</h3>
+        <div id="saveNext" class="pve-notes"></div>
+      </section>
+    </div>
+    <p class="muted small">The current Notes are kept as a snapshot before anything is written (see History). If the guest changes in Proxmox before you confirm, nothing is written.</p>
+    <div class="row-buttons end">
+      <button id="saveCancel" type="button">Cancel</button>
+      <button id="saveConfirm" type="button" class="primary"><i class="fa fa-check"></i> Write to Proxmox</button>
+    </div>
+  </dialog>
+
+  <dialog id="historyDialog" class="dialog narrow" aria-labelledby="historyTitle">
+    <h2 id="historyTitle"><i class="fa fa-history"></i> History</h2>
+    <p class="small">The Notes as they were just before each save. Loading one puts it in the editor; it is only written when you save.</p>
+    <ul id="historyList" class="history-list"></ul>
+    <div class="row-buttons end">
+      <button id="historyClose" type="button">Close</button>
+    </div>
+  </dialog>
 
   <div id="toast" class="toast" role="status" hidden></div>
   <script type="module" src="/app.js"></script>

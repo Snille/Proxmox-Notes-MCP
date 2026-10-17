@@ -36,7 +36,7 @@ export class ProxmoxClient {
       : new Agent({ connect: { rejectUnauthorized: target.verifyTls } });
   }
 
-  async request(method, path, { query, body } = {}) {
+  async request(method, path, { query, form } = {}) {
     const url = new URL(`/api2/json${path}`, this.target.baseUrl);
     for (const [key, value] of Object.entries(query ?? {})) {
       url.searchParams.set(key, value);
@@ -48,9 +48,9 @@ export class ProxmoxClient {
         headers: {
           accept: 'application/json',
           authorization: `PVEAPIToken=${this.target.tokenId}=${this.target.secret}`,
-          ...(body ? { 'content-type': 'application/json' } : {})
+          ...(form ? { 'content-type': 'application/x-www-form-urlencoded' } : {})
         },
-        body: body ? JSON.stringify(body) : undefined,
+        body: form ? form.toString() : undefined,
         dispatcher: this.dispatcher,
         signal: AbortSignal.timeout(15_000)
       });
@@ -100,6 +100,16 @@ export class ProxmoxClient {
 
   config(guest) {
     return this.get(`/nodes/${encodeURIComponent(guest.node)}/${guest.type}/${guest.vmid}/config`);
+  }
+
+  // Only the description is sent. With the digest from the config that was read, Proxmox refuses
+  // the write if the config changed in between.
+  async setDescription(guest, description, digest) {
+    const body = new URLSearchParams({ description });
+    if (digest) {
+      body.set('digest', digest);
+    }
+    return this.request('PUT', `/nodes/${encodeURIComponent(guest.node)}/${guest.type}/${guest.vmid}/config`, { form: body });
   }
 
   // Running LXC containers report their addresses here, which is how a DHCP address is found.

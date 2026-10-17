@@ -6,7 +6,9 @@ import { version } from './version.mjs';
 const INSTRUCTIONS = [
   'This server creates and reads Proxmox guest Notes.',
   'A Note is a JSON document; notes_render turns it into the Markdown Proxmox shows and checks the 8192-character limit.',
-  'Start a new Note with notes_new, read existing Markdown with notes_parse, and show the rendered Markdown to the user before anything is written.'
+  'Start a new Note with notes_new or notes_prefill, read a guest\'s Notes with notes_read.',
+  'Writing takes two steps: notes_prepare_write returns the current and the new text and a single-use confirmation; show the change to the user, and call notes_write_confirmed only after they approve it.',
+  'Every write keeps the previous Notes as a snapshot (notes_snapshots, notes_snapshot).'
 ].join(' ');
 
 export function createMcpServer(tools) {

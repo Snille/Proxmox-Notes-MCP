@@ -1,6 +1,7 @@
 import { loadSettings } from './config.mjs';
 import { OptionsStore } from './options.mjs';
 import { Proxmox } from './proxmox/index.mjs';
+import { SnapshotStore } from './snapshots.mjs';
 import { createNotesServer } from './server.mjs';
 import { buildTools } from './tools.mjs';
 import { version } from './version.mjs';
@@ -8,7 +9,8 @@ import { version } from './version.mjs';
 const settings = loadSettings();
 const options = await OptionsStore.open(settings.dataDir);
 const proxmox = await Proxmox.open(settings.targetsFile);
-const tools = buildTools({ options, proxmox });
+const snapshots = new SnapshotStore(settings.dataDir);
+const tools = buildTools({ options, proxmox, snapshots });
 const server = createNotesServer({ settings, options, tools });
 
 server.listen(settings.port, settings.host, () => {
