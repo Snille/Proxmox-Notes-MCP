@@ -83,7 +83,7 @@ The guests' facts come from their config: hostname, IP (static, or the DHCP addr
 - **Layout**: full-width table (default) or the old Markdown layout. A Note stored in the other layout is converted when it is saved, and the editor says so.
 - **Icons**: **Choose icon** opens the icon library as a searchable grid, with a second tab for dashboard-icons. An uploaded image is added to the library first. The icon is always embedded; if the Note has too little room left, it is encoded again at a lower quality.
 - **Icon library** (Settings → Icons): a grid of every icon with search, rename and remove; upload several files or drop them on the page; add icons from [dashboard-icons](https://github.com/homarr-labs/dashboard-icons) by searching for them; import a whole web icon set once (for example the old Notes Generator's, from its `select.json`), after which that web server is no longer needed. An uploaded file is named from its file name without the size (`sonarr01-512x512.png` becomes "Sonarr 01", taking the name from the icon-set list when the key is in it), and with **Replace icons with the same name** an upload updates an icon instead of adding a copy, so a whole folder can be uploaded again, for example in a larger size. Heading icons are chips, added from a searchable list of all 786 Font Awesome 4 icons.
-- **Create with AI** (a tab in **Choose icon**, and a button in Settings → Icons): give a name and what the icon shows, pick a style, and ComfyUI draws up to four images. Clicking one trims its transparent border, adds it to the library and keeps the prompt, style and seed with it.
+- **Create with AI** (a tab in **Choose icon**, and a button in Settings → Icons): give a name and what the icon shows, tick the styles you want, and ComfyUI draws up to four images. Clicking one trims its transparent border, adds it to the library and keeps the prompt, styles and seed with it. The browser remembers which styles were ticked.
 - **From Proxmox**: one button updates IP, MAC, DHCP and OS from the guest's config. When the IP changes, service links that pointed at the old IP move along. An exact OS release in the Note ("Debian 13") is kept when Proxmox only knows the family ("Debian").
 - **Import and export**: export a Note as JSON; import JSON from this tool or from the old Notes Generator, or Markdown. **Copy Markdown** puts the text on the clipboard for the Proxmox Notes field.
 - **Save to Proxmox**: a dialog shows the Notes now in Proxmox and the Notes that will be written, side by side, before anything is written. **History** lists the snapshots kept before each save.
@@ -99,7 +99,7 @@ The server sends the work to ComfyUI over its HTTP API and fetches the images, s
 
 - **Built-in recipe**: Qwen-Image with an optional speed LoRA, then background removal with the RMBG node from [ComfyUI-RMBG](https://github.com/1038lab/ComfyUI-RMBG). The defaults are Qwen-Image 2512 (fp8), the Wuli Turbo LoRA (4 steps), the Qwen 2.5 VL text encoder, the Qwen-Image VAE and RMBG-2.0, at 1328 × 1328. A model name may leave out its folder; the server finds it in the host's lists. The results go to ComfyUI's temp folder, not its output folder.
 - **Own workflow**: export it from ComfyUI with *Export (API)* and paste it. `{{prompt}}` is replaced with the prompt; `{{seed}}`, `{{width}}`, `{{height}}` and `{{count}}` become numbers. Every image the workflow outputs is offered.
-- **Styles** are prompt templates with `{{subject}}`, plus an ending for the icon's name. Two are included: blue and green metal frames (" (green)").
+- **Styles** are short prompt texts that are ticked in the dialog. The ticked ones are put first, in the order of the list, and what the icon shows comes last ("Motif: ..."). Included: Icon, Blue frame, Green frame and Empty outside; add, change, order and remove them in the settings, and choose which are ticked from the start.
 
 Finished generations are kept in memory for 30 minutes. Generation is offered in the web GUI and REST, not over MCP, because the browser draws the icon.
 
@@ -160,7 +160,7 @@ The host settings (`/api/settings/...`) are offered in the web GUI and REST only
 |------|------|
 | `/` | Web GUI |
 | `/api/icons` | The icon library: `GET` lists, `POST` adds (a WebP drawn by the browser plus the original, as base64), `PATCH`/`DELETE /api/icons/<id>` rename and remove, `GET /api/icons/<id>.webp` serves one |
-| `/api/generate` | `POST {subject, style, count, host}` starts a generation; `GET /api/generate/<id>` shows its state and image URLs; `GET /api/generate/<id>/<n>.png` serves an image |
+| `/api/generate` | `POST {subject, styles, count, host}` starts a generation; `GET /api/generate/<id>` shows its state and image URLs; `GET /api/generate/<id>/<n>.png` serves an image |
 | `/api/generator/test` | `POST` the generator settings (also unsaved ones) to test each ComfyUI host |
 | `/api/dashboard-icons?q=<words>` | Searches the names in dashboard-icons; `GET /api/dashboard-icons/<name>.png` fetches one through the server |
 | `/api/icon?key=<key>` | An icon from the configured web icon set, for the import. Only URLs built from that icon set are fetched. |

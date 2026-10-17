@@ -59,17 +59,13 @@ export const DEFAULT_OPTIONS = {
       removeBackground: 'RMBG-2.0'
     },
     workflow: '',
+    // Styles are ticked in the dialog; each ticked style adds its text to the prompt, in this
+    // order, before what the icon shows. "checked" styles are ticked from the start.
     styles: [
-      {
-        name: 'Blue',
-        prompt: 'A high quality icon type picture viewed straight ahead from the front with a spotless plain blue metallic frame, inside the frame is a {{subject}}. Outside the frame is emptiness.',
-        labelSuffix: ''
-      },
-      {
-        name: 'Green',
-        prompt: 'A high quality icon type picture viewed straight ahead from the front with a spotless clean new green metallic frame, inside the frame is a {{subject}}. Outside the frame is emptiness.',
-        labelSuffix: ' (green)'
-      }
+      { name: 'Icon', prompt: 'A high quality icon type picture viewed straight ahead from the front.', checked: true },
+      { name: 'Blue frame', prompt: 'The picture has a spotless plain blue metallic frame around it.', checked: true },
+      { name: 'Green frame', prompt: 'The picture has a spotless clean new green metallic frame around it.', checked: false },
+      { name: 'Empty outside', prompt: 'Outside the frame is emptiness.', checked: true }
     ]
   }
 };
@@ -121,9 +117,9 @@ export const optionsSchema = z.object({
     workflow: z.string().max(500_000),
     styles: z.array(z.object({
       name: z.string().trim().min(1).max(40),
-      prompt: z.string().min(1).max(2000).refine(value => value.includes('{{subject}}'), 'a style prompt must contain {{subject}}'),
-      labelSuffix: z.string().max(40)
-    })).max(20).refine(styles => new Set(styles.map(style => style.name)).size === styles.length, 'style names must differ')
+      prompt: z.string().trim().min(1).max(2000),
+      checked: z.boolean()
+    })).max(30).refine(styles => new Set(styles.map(style => style.name)).size === styles.length, 'style names must differ')
   }).refine(generator => generator.mode !== 'workflow' || generator.workflow.includes('{{prompt}}'), 'an own workflow must contain {{prompt}}')
 }).strict();
 
@@ -175,7 +171,9 @@ export function newDocument(options, fill = {}) {
 // Missing parts (for example appearance or generator, added later) come from the defaults.
 export function withDefaults(options) {
   const defaults = structuredClone(DEFAULT_OPTIONS);
-  const generator = options.generator ?? {};
+  const generator = { ...options.generator };
+  // Styles from 0.10.0 before release were whole prompts with {{subject}}; they become the defaults.
+  if (generator.styles?.some(style => String(style.prompt).includes('{{subject}}'))) delete generator.styles;
   return {
     ...defaults,
     ...options,

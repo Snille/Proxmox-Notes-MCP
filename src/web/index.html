@@ -287,7 +287,7 @@ pvenode cert info</pre>
       </fieldset>
       <fieldset>
         <legend data-i18n="gen.styles">Styles</legend>
-        <p class="small" data-i18n="gen.stylesHelp">A style is the prompt around what the icon shows; {{subject}} is replaced with it. The name ending is added to the icon's name, for example " (green)".</p>
+        <p class="small" data-i18n="gen.stylesHelp">Styles are ticked in the Create with AI dialog. Each ticked style adds its text to the prompt, in this order, and what the icon shows comes last.</p>
         <div id="genStyles"></div>
         <div class="row-buttons">
           <button id="btnAddStyle" type="button"><i class="fa fa-plus"></i> <span data-i18n="gen.addStyle">Add style</span></button>
@@ -342,11 +342,9 @@ pvenode cert info</pre>
     <div id="iconTabGenerate" hidden>
       <p id="genNotReady" class="muted small" data-i18n="gen.notReady">No ComfyUI host is set. Add one under Settings → Image generator.</p>
       <div id="genReady">
-        <div class="grid-2">
-          <label class="label"><span data-i18n="gen.name">Name in the library</span><input id="genName" type="text" autocomplete="off" data-i18n-placeholder="gen.namePlaceholder"></label>
-          <label class="label"><span data-i18n="gen.style">Style</span><select id="genStyle"></select></label>
-        </div>
+        <label class="label"><span data-i18n="gen.name">Name in the library</span><input id="genName" type="text" autocomplete="off" data-i18n-placeholder="gen.namePlaceholder"></label>
         <label class="label"><span data-i18n="gen.subject">What the icon shows</span><textarea id="genSubject" rows="2" data-i18n-placeholder="gen.subjectPlaceholder"></textarea></label>
+        <div class="label"><span data-i18n="gen.style">Styles</span><div id="genStyleTags" class="chips style-tags"></div></div>
         <div class="library-toolbar">
           <label class="label inline"><span data-i18n="gen.count">Images</span><select id="genCount"><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
           <label class="label inline"><span data-i18n="gen.host">ComfyUI</span><select id="genHost"></select></label>

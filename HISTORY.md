@@ -1,10 +1,11 @@
 # History
 
-## 0.10.0 - 2026-10-17
+## 0.10.0 - 2026-10-18
 
-- Icons can be created with ComfyUI. **Choose icon** has a tab **Create with AI**, and Settings → Icons a button for it: give a name and what the icon shows, pick a style and how many images (1 to 4). The server sends the work to ComfyUI, follows it (queued, drawing) and fetches the images; clicking one trims its transparent border, draws the icon and adds it to the library with the original, the prompt, the style and the seed.
+- Icons can be created with ComfyUI. **Choose icon** has a tab **Create with AI**, and Settings → Icons a button for it: give a name and what the icon shows, tick styles and choose how many images (1 to 4). The server sends the work to ComfyUI, follows it (queued, drawing) and fetches the images; clicking one trims its transparent border, draws the icon and adds it to the library with the original, the prompt, the styles and the seed.
 - Built-in recipe from Erik's own workflow: Qwen-Image 2512 with the Wuli Turbo LoRA (4 steps, 1328 × 1328), then RMBG-2.0 for a transparent background, which replaces the separate Qwen-Image-Edit pass that made the background white. Model names may leave out the folder; the server looks them up on the host. An own workflow in ComfyUI's API format can be used instead, with `{{prompt}}`, `{{seed}}`, `{{width}}`, `{{height}}` and `{{count}}`.
-- Settings → **Image generator**: ComfyUI hosts tried in order, a connection test that shows the GPU and the models found (or missing), the recipe, an own workflow, images per run, a time limit and the styles (blue and green frames to start with).
+- Settings → **Image generator**: ComfyUI hosts tried in order, a connection test that shows the GPU and the models found (or missing), the recipe, an own workflow, images per run, a time limit and the styles.
+- Styles are tags: each is a short text, ticked in the dialog, and the ticked texts go first in the prompt, in the order of the list, with what the icon shows last ("Motif: ..."). So a frame colour is one tick and the name is typed as wanted, with no name ending per style. Included: Icon, Blue frame, Green frame and Empty outside. The browser remembers the ticked styles. A prompt built this way gave the same framed icons with a transparent background as the old whole-prompt templates.
 - An icon original may now be up to 8 MB, since a generated 1328 px PNG with transparency is about 4 MB.
 - Interface texts keep `{{placeholders}}` as they are.
 - Tested against ComfyUI 0.41.3 on an RTX 5070 Ti: two images in 29 seconds once the model is loaded.

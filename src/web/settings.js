@@ -312,15 +312,24 @@ function collectGenerator() {
 function renderStyles() {
   const box = $('genStyles');
   box.replaceChildren(...draft.generator.styles.map((style, index) => {
-    const update = key => event => { style[key] = event.target.value; };
+    const list = draft.generator.styles;
+    const move = offset => () => {
+      list.splice(index + offset, 0, list.splice(index, 1)[0]);
+      renderStyles();
+    };
     return ctx.el('div', { class: 'style-item' }, [
       ctx.el('div', { class: 'grid-2' }, [
-        ctx.el('label', { class: 'label' }, [ctx.el('span', { text: t('gen.styleName') }), ctx.el('input', { type: 'text', value: style.name, oninput: update('name') })]),
-        ctx.el('label', { class: 'label' }, [ctx.el('span', { text: t('gen.labelSuffix') }), ctx.el('input', { type: 'text', value: style.labelSuffix, placeholder: ' (green)', oninput: update('labelSuffix') })])
+        ctx.el('label', { class: 'label' }, [ctx.el('span', { text: t('gen.styleName') }), ctx.el('input', { type: 'text', value: style.name, oninput: event => { style.name = event.target.value; } })]),
+        ctx.el('label', { class: 'check' }, [
+          ctx.el('input', { type: 'checkbox', checked: style.checked, onchange: event => { style.checked = event.target.checked; } }),
+          ctx.el('span', { text: t('gen.styleChecked') })
+        ])
       ]),
-      ctx.el('label', { class: 'label' }, [ctx.el('span', { text: t('gen.stylePrompt') }), ctx.el('textarea', { rows: 3, text: style.prompt, oninput: update('prompt') })]),
+      ctx.el('label', { class: 'label' }, [ctx.el('span', { text: t('gen.stylePrompt') }), ctx.el('textarea', { rows: 2, text: style.prompt, oninput: event => { style.prompt = event.target.value; } })]),
       ctx.el('div', { class: 'row-buttons' }, [
-        ctx.el('button', { type: 'button', class: 'small danger', onclick: () => { draft.generator.styles.splice(index, 1); renderStyles(); } }, [
+        ctx.el('button', { type: 'button', class: 'small icon', title: t('moveUp'), disabled: index === 0, onclick: move(-1) }, [ctx.el('i', { class: 'fa fa-arrow-up' })]),
+        ctx.el('button', { type: 'button', class: 'small icon', title: t('moveDown'), disabled: index === list.length - 1, onclick: move(1) }, [ctx.el('i', { class: 'fa fa-arrow-down' })]),
+        ctx.el('button', { type: 'button', class: 'small danger', onclick: () => { list.splice(index, 1); renderStyles(); } }, [
           ctx.el('i', { class: 'fa fa-trash' }), ctx.el('span', { text: ` ${t('remove')}` })
         ])
       ])
@@ -329,7 +338,7 @@ function renderStyles() {
 }
 
 function addStyle() {
-  draft.generator.styles.push({ name: t('gen.newStyle'), prompt: 'A high quality icon of a {{subject}}, on a plain white background.', labelSuffix: '' });
+  draft.generator.styles.push({ name: t('gen.newStyle'), prompt: '', checked: false });
   renderStyles();
 }
 

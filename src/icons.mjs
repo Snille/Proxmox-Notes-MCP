@@ -113,7 +113,7 @@ export class IconStore {
     if (generation && typeof generation === 'object') {
       entry.generation = {
         subject: String(generation.subject ?? '').slice(0, 1000),
-        style: String(generation.style ?? '').slice(0, 40),
+        style: String(generation.style ?? '').slice(0, 200),
         prompt: String(generation.prompt ?? '').slice(0, 4000),
         seed: Number.isSafeInteger(generation.seed) ? generation.seed : null
       };

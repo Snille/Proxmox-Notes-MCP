@@ -3,7 +3,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { fillWorkflow, Generator, parseWorkflow, recipeWorkflow, resolveModel, stylePrompt } from '../src/comfyui.mjs';
+import { buildPrompt, fillWorkflow, Generator, parseWorkflow, recipeWorkflow, resolveModel } from '../src/comfyui.mjs';
 import { loadSettings } from '../src/config.mjs';
 import { IconStore } from '../src/icons.mjs';
 import { OptionsStore, withDefaults } from '../src/options.mjs';
@@ -82,10 +82,19 @@ async function finished(generator, id) {
 }
 
 describe('prompts and workflows', () => {
-  it('puts the subject in the style prompt without a doubled full stop', () => {
-    const style = { prompt: 'An icon with a {{subject}}. Outside is emptiness.' };
-    expect(stylePrompt(style, ' big drop of water. ')).toBe('An icon with a big drop of water. Outside is emptiness.');
-    expect(() => stylePrompt(style, '  ')).toThrow(/Describe/);
+  it('builds the prompt from the ticked styles in order and puts the subject last', () => {
+    const styles = [{ prompt: 'An icon. ' }, { prompt: 'Green frame.' }];
+    expect(buildPrompt(styles, ' big drop of water. ')).toBe('An icon. Green frame. Motif: big drop of water.');
+    expect(buildPrompt([], 'lamp')).toBe('Motif: lamp.');
+    expect(() => buildPrompt(styles, '  ')).toThrow(/Describe/);
+  });
+
+  it('replaces styles in the old format with {{subject}} by the defaults', () => {
+    const old = withDefaults({ generator: { hosts: ['http://x:8188'], styles: [{ name: 'Blue', prompt: 'A frame with a {{subject}}.', labelSuffix: '' }] } });
+    expect(old.generator.hosts).toEqual(['http://x:8188']);
+    expect(old.generator.styles.map(style => style.name)).toEqual(['Icon', 'Blue frame', 'Green frame', 'Empty outside']);
+    const own = withDefaults({ generator: { styles: [{ name: 'Mine', prompt: 'Flat.', checked: true }] } });
+    expect(own.generator.styles).toEqual([{ name: 'Mine', prompt: 'Flat.', checked: true }]);
   });
 
   it('finds models by name in any folder, ignoring case', () => {
@@ -149,9 +158,11 @@ describe('generation against ComfyUI', () => {
   it('runs the recipe on the first host that answers and returns the images', async () => {
     const comfy = await fakeComfy();
     const generator = generatorFor({ hosts: ['http://127.0.0.1:1', comfy.url] });
-    const started = await generator.start({ subject: 'drop of water', style: 'Green', count: 2 });
-    expect(started).toMatchObject({ state: 'queued', host: comfy.url, style: 'Green', labelSuffix: ' (green)', count: 2 });
-    expect(started.prompt).toContain('green metallic frame, inside the frame is a drop of water. Outside');
+    const started = await generator.start({ subject: 'drop of water', styles: ['Empty outside', 'Green frame'], count: 2 });
+    expect(started).toMatchObject({ state: 'queued', host: comfy.url, styles: ['Green frame', 'Empty outside'], count: 2 });
+    expect(started.prompt).toBe('The picture has a spotless clean new green metallic frame around it. Outside the frame is emptiness. Motif: drop of water.');
+    const byDefault = await generator.start({ subject: 'lamp' });
+    expect(byDefault.styles).toEqual(['Icon', 'Blue frame', 'Empty outside']);
     const job = await finished(generator, started.id);
     expect(job.state).toBe('done');
     expect(generator.publicJob(job).images).toEqual([`/api/generate/${job.id}/0.png`, `/api/generate/${job.id}/1.png`]);

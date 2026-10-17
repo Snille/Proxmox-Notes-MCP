@@ -24,12 +24,11 @@ const MODEL_LOADERS = [
 
 // ---------- prompts and workflows ----------
 
-// The style's template with the subject in place of {{subject}}. A full stop the subject ends with
-// is dropped, because the templates put their own punctuation after it.
-export function stylePrompt(style, subject) {
+// The prompt: the texts of the ticked styles in their order, then what the icon shows.
+export function buildPrompt(styles, subject) {
   const text = String(subject ?? '').trim().replace(/[.\s]+$/, '');
   if (!text) throw badRequest('Describe what the icon should show');
-  return style.prompt.replaceAll('{{subject}}', text);
+  return [...styles.map(style => style.prompt.trim()), `Motif: ${text}.`].filter(Boolean).join(' ');
 }
 
 /** The built-in recipe as a ComfyUI API workflow. `models` holds the names as the host lists them. */
@@ -283,11 +282,13 @@ export class Generator {
     return { results };
   }
 
-  async start({ subject, style: styleName, count, host } = {}) {
+  // styles: the names of the ticked styles; without it the styles ticked in the settings are used.
+  async start({ subject, styles: names, count, host } = {}) {
     const settings = this.settings();
-    const style = settings.styles.find(item => item.name === styleName) ?? settings.styles[0];
-    if (!style) throw badRequest('Add a style under Settings → Image generator first');
-    const prompt = stylePrompt(style, subject);
+    const styles = Array.isArray(names)
+      ? settings.styles.filter(style => names.includes(style.name))
+      : settings.styles.filter(style => style.checked);
+    const prompt = buildPrompt(styles, subject);
     const images = Math.min(Math.max(Number(count) || settings.count, 1), 4);
     const seed = randomInt(1, 2 ** 47);
     const client = await this.pickHost(host);
@@ -305,8 +306,7 @@ export class Generator {
       id: randomUUID(),
       state: 'queued',
       host: client.baseUrl,
-      style: style.name,
-      labelSuffix: style.labelSuffix,
+      styles: styles.map(style => style.name),
       subject: String(subject).trim(),
       prompt,
       seed,

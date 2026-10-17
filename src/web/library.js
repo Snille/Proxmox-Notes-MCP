@@ -226,22 +226,42 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
   // ---------- create with AI ----------
 
   const styles = generator?.styles ?? [];
-  const currentStyle = () => styles.find(style => style.name === $('genStyle').value) ?? styles[0];
+  const tickedStyles = () => [...$('genStyleTags').querySelectorAll('input:checked')].map(box => box.value);
+  // This browser remembers which styles were ticked last time; otherwise the settings decide.
+  const STYLE_KEY = 'proxmox-notes.generatorStyles';
+  const rememberedStyles = () => {
+    try {
+      const names = JSON.parse(localStorage.getItem(STYLE_KEY));
+      return Array.isArray(names) ? names : null;
+    } catch {
+      return null;
+    }
+  };
+  const rememberStyles = () => {
+    try {
+      localStorage.setItem(STYLE_KEY, JSON.stringify(tickedStyles()));
+    } catch {
+      // Storage may be blocked; the settings then decide next time.
+    }
+  };
+  // The same order and joining as the server's buildPrompt.
   const showPrompt = () => {
     const subject = $('genSubject').value.trim().replace(/[.\s]+$/, '');
-    $('genPrompt').textContent = currentStyle() && subject ? currentStyle().prompt.replaceAll('{{subject}}', subject) : '';
+    const ticked = tickedStyles();
+    const parts = styles.filter(style => ticked.includes(style.name)).map(style => style.prompt.trim());
+    $('genPrompt').textContent = subject ? [...parts, `Motif: ${subject}.`].join(' ') : '';
   };
 
   const keepGenerated = async (job, label, src) => {
     try {
       const original = await (await fetch(src)).blob();
       const icon = await addIcon({
-        label: `${label}${job.labelSuffix}`,
+        label,
         blob: await trimTransparent(original),
         original,
-        source: `comfyui:${job.style}`,
+        source: 'comfyui',
         size,
-        generation: { subject: job.subject, style: job.style, prompt: job.prompt, seed: job.seed }
+        generation: { subject: job.subject, style: job.styles.join(', '), prompt: job.prompt, seed: job.seed }
       });
       state.icons.push(icon);
       toast(t('lib.added', { name: icon.label }));
@@ -264,7 +284,7 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
     $('genGrid').replaceChildren();
     try {
       let { job } = await request('POST', '/api/generate', {
-        subject, style: $('genStyle').value, count: Number($('genCount').value), host: $('genHost').value || undefined
+        subject, styles: tickedStyles(), count: Number($('genCount').value), host: $('genHost').value || undefined
       });
       state.job = job.id;
       while (job.state === 'queued' || job.state === 'running') {
@@ -288,11 +308,15 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
   };
 
   const fillGenerator = () => {
-    const ready = Boolean(generator?.hosts?.length && styles.length);
+    const ready = Boolean(generator?.hosts?.length);
     $('genReady').hidden = !ready;
     $('genNotReady').hidden = ready;
     if (!ready) return;
-    $('genStyle').replaceChildren(...styles.map(style => el('option', { value: style.name, text: style.name })));
+    const remembered = rememberedStyles();
+    $('genStyleTags').replaceChildren(...styles.map(style => el('label', { class: 'icon-chip style-tag', title: style.prompt }, [
+      el('input', { type: 'checkbox', value: style.name, checked: remembered ? remembered.includes(style.name) : style.checked }),
+      el('span', { text: style.name })
+    ])));
     $('genCount').value = String(generator.count);
     $('genHost').replaceChildren(el('option', { value: '', text: t('gen.autoHost') }), ...generator.hosts.map(url => el('option', { value: url, text: url })));
     $('genName').value = name;
@@ -325,11 +349,13 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
     });
     dialog.addEventListener('close', () => { picker?.resolve?.(null); if (picker) picker.resolve = null; });
     $('btnGenerate').addEventListener('click', () => picker?.generate());
-    for (const id of ['genSubject', 'genStyle']) $(id).addEventListener('input', () => picker?.showPrompt());
+    $('genSubject').addEventListener('input', () => picker?.showPrompt());
+    $('genStyleTags').addEventListener('change', () => { picker?.rememberStyles(); picker?.showPrompt(); });
   }
 
   state.generate = generate;
   state.showPrompt = showPrompt;
+  state.rememberStyles = rememberStyles;
   state.showLibrary = showLibrary;
   state.searchDashboard = searchDashboard;
   state.setTab = setTab;
