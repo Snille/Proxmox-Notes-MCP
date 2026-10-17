@@ -5,6 +5,7 @@
 export const LANGUAGES = { en: 'English', sv: 'Svenska' };
 
 const en = {
+  'lib.embedNew': 'Put a new icon in the Note right away',
   'gen.tab': 'Create with AI',
   'gen.notReady': 'No ComfyUI host is set. Add one under Settings → Image generator.',
   'gen.name': 'Name in the library',
@@ -191,6 +192,7 @@ const en = {
 };
 
 const sv = {
+  'lib.embedNew': 'Lägg in en ny ikon i noten direkt',
   'gen.tab': 'Skapa med AI',
   'gen.notReady': 'Ingen ComfyUI-värd är inställd. Lägg till en under Inställningar → Bildgenerator.',
   'gen.name': 'Namn i biblioteket',

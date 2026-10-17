@@ -172,6 +172,10 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
   picker = state;
   const $ = id => document.getElementById(id);
 
+  // A new icon (uploaded, from dashboard-icons or generated) goes into the Note only when ticked;
+  // otherwise it is just added to the library and the dialog stays open.
+  const embedNew = () => mode === 'pick' && $('iconDialogEmbed').checked;
+
   const choose = icon => {
     if (mode === 'pick') {
       dialog.close();
@@ -211,7 +215,7 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
               const icon = await addIcon({ label: labelFromName(item.id), blob, source: `dashboard-icons:${item.id}`, size });
               state.icons.push(icon);
               toast(t('lib.added', { name: icon.label }));
-              if (mode === 'pick') choose(icon);
+              if (embedNew()) choose(icon);
             } catch (error) {
               toast(error.message, 'bad');
             }
@@ -265,7 +269,7 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
       });
       state.icons.push(icon);
       toast(t('lib.added', { name: icon.label }));
-      choose(icon);
+      if (embedNew()) choose(icon);
     } catch (error) {
       toast(error.message, 'bad');
     }
@@ -331,6 +335,7 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
     $('iconTabLibrary').hidden = name !== 'library';
     $('iconTabDashboard').hidden = name !== 'dashboard';
     $('iconTabGenerate').hidden = name !== 'generate';
+    $('iconDialogEmbedRow').hidden = mode !== 'pick';
     if (name === 'dashboard' && !$('dashboardGrid').childElementCount) searchDashboard();
     if (name === 'library') showLibrary();
   };
@@ -370,12 +375,13 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
       }
     }
     showLibrary();
-    if (last && mode === 'pick' && files.length === 1) choose(last);
+    if (last && files.length === 1 && embedNew()) choose(last);
   };
 
   $('iconDialogTitle').textContent = mode === 'pick' ? t('lib.pickTitle') : t('lib.addTitle');
   $('iconDialogSearch').value = '';
   $('dashboardGrid').replaceChildren();
+  $('iconDialogEmbed').checked = true;
   fillGenerator();
   dialog.showModal();
   loadLibrary().then(() => setTab(tab));
