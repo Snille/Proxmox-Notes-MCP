@@ -5,6 +5,7 @@ import { loadSettings } from './config.mjs';
 import { createMcpServer } from './mcp.mjs';
 import { OptionsStore } from './options.mjs';
 import { Proxmox } from './proxmox/index.mjs';
+import { IconStore } from './icons.mjs';
 import { SnapshotStore } from './snapshots.mjs';
 import { buildTools } from './tools.mjs';
 
@@ -12,5 +13,6 @@ const settings = loadSettings();
 const options = await OptionsStore.open(settings.dataDir);
 const proxmox = await Proxmox.open(settings.targetsFile);
 const snapshots = new SnapshotStore(settings.dataDir);
-const tools = buildTools({ options, proxmox, snapshots });
+const icons = await IconStore.open(settings.dataDir);
+const tools = buildTools({ options, proxmox, snapshots, icons });
 serveStdio(() => createMcpServer(tools));

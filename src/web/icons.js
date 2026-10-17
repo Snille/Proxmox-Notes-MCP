@@ -41,12 +41,3 @@ export async function embedImage(blob, { width, height, budget }) {
   }
   throw new Error(`The image does not fit in the ${budget} characters left, even at low quality. Shorten the text or use a smaller icon size.`);
 }
-
-export async function fetchIconSetImage(key) {
-  const response = await fetch(`/api/icon?key=${encodeURIComponent(key)}`);
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body.error ?? `The icon could not be loaded (${response.status})`);
-  }
-  return response.blob();
-}

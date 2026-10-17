@@ -1,5 +1,14 @@
 # History
 
+## 0.8.0 - 2026-10-17
+
+- An icon library in the service (`/data/icons`), which replaces the web icon set as the source of icons. Erik's decision: icons are always embedded; a web icon set is only imported once, and link mode is gone. Each icon is kept as a WebP drawn by the browser at the instance's icon size (ready to embed) plus the uploaded original. The server only checks file signatures (PNG, JPEG, GIF, WebP; SVG refused), so it needs no image library.
+- Settings → Icons is a grid with search, rename, remove, multi-file upload and drag and drop. **From dashboard-icons** searches the open dashboard-icons set by name (only its `tree.json` is read, cached for a day) and copies icons into the library through the server. **Import from a web icon set** copies a whole set once, for example the old generator's from its `select.json`; tested with Erik's set: 36 of 36 icons imported.
+- Heading icons are chips with their icon; new ones are chosen from a searchable list of all 786 Font Awesome 4 icons, read from the bundled CSS.
+- In the editor, **Choose icon** opens the library as a grid with search, with dashboard-icons in a second tab; an uploaded image goes into the library first. The stored WebP is embedded as it is, and encoded again at a lower quality only when the Note has too little room left.
+- MCP: `notes_icons` lists the library, and `notes_new` and `notes_prefill` take `icon` (a library id) and embed it, so an assistant can give a Note an icon without a browser.
+- Number fields in the settings now have the same style as the other fields.
+
 ## 0.7.0 - 2026-10-17
 
 - A settings page in the web GUI, which replaces editing `targets.json` and `select.json` by hand.

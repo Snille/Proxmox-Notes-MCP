@@ -5,6 +5,7 @@ import { extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hostHeaderValidation } from '@modelcontextprotocol/node';
 import { createMcpNodeHandler } from './mcp.mjs';
+import { fetchDashboardIcon, searchDashboardIcons } from './dashboard-icons.mjs';
 import { fromLegacySelect, iconSetUrl } from './options.mjs';
 import { fetchCertificate, testTarget } from './proxmox/client.mjs';
 import { resolveTarget } from './proxmox/targets.mjs';
@@ -68,6 +69,8 @@ async function staticFile(pathname) {
 
 // Embedded icons make a Note up to 8 KB; this leaves room for an imported legacy file or options.
 const MAX_BODY_BYTES = 2_000_000;
+// An icon upload carries the original image too (up to 4 MB, about 5.4 MB as base64).
+const ICON_UPLOAD_BYTES = 6_000_000;
 
 function sendJson(res, status, document) {
   const body = JSON.stringify(document);
@@ -79,13 +82,13 @@ function sendJson(res, status, document) {
   res.end(body);
 }
 
-async function readJsonBody(req) {
+async function readJsonBody(req, maxBytes = MAX_BODY_BYTES) {
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > MAX_BODY_BYTES) {
-      throw Object.assign(new Error(`Request body exceeds ${MAX_BODY_BYTES} bytes`), { statusCode: 413 });
+    if (size > maxBytes) {
+      throw Object.assign(new Error(`Request body exceeds ${maxBytes} bytes`), { statusCode: 413 });
     }
     chunks.push(chunk);
   }
@@ -119,6 +122,61 @@ function hasMcpToken(req, token) {
   const given = Buffer.from(header.startsWith('Bearer ') ? header.slice(7) : '');
   const expected = Buffer.from(token);
   return given.length === expected.length && timingSafeEqual(given, expected);
+}
+
+function sendImage(res, data, type) {
+  res.writeHead(200, { 'content-type': type, 'content-length': data.length, ...SECURITY_HEADERS });
+  res.end(data);
+}
+
+// The icon library and dashboard-icons. Uploads carry a WebP drawn by the browser plus the
+// original, as base64 in JSON.
+async function handleIcons(req, res, url, icons, options) {
+  const path = url.pathname;
+  if (!icons || !(path.startsWith('/api/icons') || path.startsWith('/api/dashboard-icons'))) {
+    return false;
+  }
+  if (req.method === 'GET' && path === '/api/icons') {
+    const { width, height } = options.get().iconSet;
+    sendJson(res, 200, { icons: icons.list(), size: { width, height } });
+    return true;
+  }
+  if (req.method === 'POST' && path === '/api/icons') {
+    sendJson(res, 200, { icon: await icons.add(await readJsonBody(req, ICON_UPLOAD_BYTES)) });
+    return true;
+  }
+  const image = path.match(/^\/api\/icons\/([a-z0-9-]+)\.webp$/);
+  if (req.method === 'GET' && image) {
+    sendImage(res, (await icons.read(image[1])).data, 'image/webp');
+    return true;
+  }
+  const original = path.match(/^\/api\/icons\/([a-z0-9-]+)\/original$/);
+  if (req.method === 'GET' && original) {
+    const { data, type } = await icons.readOriginal(original[1]);
+    sendImage(res, data, type);
+    return true;
+  }
+  const one = path.match(/^\/api\/icons\/([a-z0-9-]+)$/);
+  if (one && req.method === 'PATCH') {
+    sendJson(res, 200, { icon: await icons.rename(one[1], (await readJsonBody(req)).label) });
+    return true;
+  }
+  if (one && req.method === 'DELETE') {
+    await icons.remove(one[1]);
+    sendJson(res, 200, { removed: one[1] });
+    return true;
+  }
+  if (req.method === 'GET' && path === '/api/dashboard-icons') {
+    sendJson(res, 200, await searchDashboardIcons(url.searchParams.get('q') ?? ''));
+    return true;
+  }
+  const dashboard = path.match(/^\/api\/dashboard-icons\/([a-z0-9._-]+)\.png$/);
+  if (req.method === 'GET' && dashboard) {
+    sendImage(res, await fetchDashboardIcon(dashboard[1]), 'image/png');
+    return true;
+  }
+  sendJson(res, 404, { error: 'Unknown icon endpoint' });
+  return true;
 }
 
 async function handleSettings(req, url, proxmox) {
@@ -171,7 +229,7 @@ async function handleSettings(req, url, proxmox) {
   return { status: 404, body: { error: 'Unknown settings endpoint' } };
 }
 
-export function createNotesServer({ settings, options, tools, proxmox }) {
+export function createNotesServer({ settings, options, tools, proxmox, icons }) {
   const toolMap = new Map(tools.map(tool => [tool.name, tool]));
   const validateHost = settings.allowedHosts.length ? hostHeaderValidation(settings.allowedHosts) : null;
   const mcp = createMcpNodeHandler(tools);
@@ -238,6 +296,10 @@ export function createNotesServer({ settings, options, tools, proxmox }) {
       }
 
       // The settings page. Not offered over MCP: token secrets should not pass through an assistant.
+      if (await handleIcons(req, res, url, icons, options)) {
+        return;
+      }
+
       const settingsResult = await handleSettings(req, url, proxmox);
       if (settingsResult) {
         sendJson(res, settingsResult.status ?? 200, settingsResult.body);

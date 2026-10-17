@@ -8,7 +8,8 @@ import {
   SCHEMA
 } from '/format/index.mjs';
 import { applyTranslations, setLanguage, t } from './i18n.js';
-import { embedImage, fetchIconSetImage } from './icons.js';
+import { embedImage } from './icons.js';
+import { addIcon, iconUrl, labelFromFile, openIconDialog } from './library.js';
 import { renderPreview } from './preview.js';
 import { initSettings, openSettings, refreshSettings } from './settings.js';
 
@@ -122,7 +123,6 @@ function applyAppearance() {
 function refreshTexts() {
   $('btnSettingsText').textContent = $('settingsView').hidden ? t('settings') : t('settings.back');
   fillLayoutChoice();
-  fillIconKeys();
   renderMessage();
   if (state.doc || state.mode === 'raw') {
     if (state.mode === 'form') renderSections();
@@ -155,11 +155,6 @@ function currentMarkdown() {
   return state.mode === 'raw' ? state.raw : renderNotes(state.doc, { layout: state.layout });
 }
 
-function iconSetUrl(key) {
-  const set = state.options?.iconSet;
-  if (!set?.baseUrl || !key) return null;
-  return `${set.baseUrl.replace(/\/$/, '')}/${key}${set.width}x${set.height}${set.extension ?? '.png'}`;
-}
 
 // ---------- loading a Note into the editor ----------
 
@@ -223,8 +218,6 @@ function renderEditor() {
     $('title').value = doc.title;
     $('description').value = doc.description;
     $('notes').value = doc.notes;
-    $('iconKey').value = doc.image?.key ?? '';
-    $('embed').checked = doc.image ? doc.image.src.startsWith('data:') : $('embed').checked;
     renderSections();
   }
   renderFacts();
@@ -459,44 +452,43 @@ function imageBudget() {
   return PROXMOX_DESCRIPTION_LIMIT - withoutImage - 64;
 }
 
-async function setImageFromBlob(blob, key) {
-  const { width = 100, height = 100 } = state.options?.iconSet ?? {};
-  const result = await embedImage(blob, { width, height, budget: imageBudget() });
-  state.doc.image = { src: result.src, width, height, ...(key ? { key } : {}) };
-  update();
-  toast(result.quality
-    ? t('icon.doneQuality', { format: result.format, quality: Math.round(result.quality * 100), length: result.length })
-    : t('icon.done', { format: result.format, length: result.length }));
+const iconSize = () => ({ width: state.options?.iconSet?.width ?? 100, height: state.options?.iconSet?.height ?? 100 });
+
+async function dataUri(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
 }
 
-async function applyIconKey() {
-  const key = $('iconKey').value;
-  if (!key) {
-    return;
+// Embeds a library icon as it is; only when the Note has too little room left is it encoded again
+// at a lower quality.
+async function embedLibraryIcon(icon) {
+  const blob = await (await fetch(iconUrl(icon.id))).blob();
+  const width = icon.width ?? iconSize().width;
+  const height = icon.height ?? iconSize().height;
+  let src = await dataUri(blob);
+  const budget = imageBudget();
+  if (src.length > budget) {
+    const result = await embedImage(blob, { width, height, budget });
+    src = result.src;
+    toast(t('icon.doneQuality', { format: result.format, quality: result.quality ? Math.round(result.quality * 100) : '-', length: result.length }));
   }
-  const { width = 100, height = 100 } = state.options?.iconSet ?? {};
+  state.doc.image = { src, width, height, key: icon.id };
+  state.iconLabel = icon.label;
+  update();
+}
+
+async function pickIcon() {
+  const icon = await openIconDialog({ el, toast, size: iconSize(), mode: 'pick' });
+  if (!icon) return;
   try {
-    if ($('embed').checked) {
-      await setImageFromBlob(await fetchIconSetImage(key), key);
-    } else {
-      state.doc.image = { src: iconSetUrl(key), width, height, key };
-      update();
-    }
+    await embedLibraryIcon(icon);
   } catch (error) {
     toast(error.message, 'bad');
   }
-}
-
-function fillIconKeys() {
-  const select = $('iconKey');
-  const current = select.value || state.doc?.image?.key || '';
-  const images = state.options?.images ?? [];
-  select.replaceChildren(el('option', { value: '', text: images.length ? t('iconKey.choose') : t('iconKey.none') }));
-  for (const image of images) {
-    select.append(el('option', { value: image.key, text: image.label }));
-  }
-  select.value = current;
-  select.disabled = !state.options?.iconSet?.baseUrl || images.length === 0;
 }
 
 function fillLayoutChoice() {
@@ -692,20 +684,20 @@ function bindInputs() {
   $('description').addEventListener('input', e => { state.doc.description = e.target.value; update(); });
   $('notes').addEventListener('input', e => { state.doc.notes = e.target.value; update(); });
   $('raw').addEventListener('input', e => { state.raw = e.target.value; update(); });
-  $('iconKey').addEventListener('change', applyIconKey);
-  $('embed').addEventListener('change', () => { if ($('iconKey').value) applyIconKey(); });
+  $('btnPickIcon').addEventListener('click', pickIcon);
   $('iconUpload').addEventListener('change', async e => {
     const file = e.target.files[0];
     e.target.value = '';
     if (!file) return;
     try {
-      $('iconKey').value = '';
-      await setImageFromBlob(file, null);
+      const icon = await addIcon({ label: labelFromFile(file.name), blob: file, source: 'upload', size: iconSize() });
+      toast(t('lib.added', { name: icon.label }));
+      await embedLibraryIcon(icon);
     } catch (error) {
       toast(error.message, 'bad');
     }
   });
-  $('btnIconRemove').addEventListener('click', () => { state.doc.image = null; $('iconKey').value = ''; update(); });
+  $('btnIconRemove').addEventListener('click', () => { state.doc.image = null; update(); });
   $('btnApplyFacts').addEventListener('click', applyFacts);
 
   $('btnRawParse').addEventListener('click', () => {
@@ -777,7 +769,6 @@ function bindInputs() {
     getOptions: () => state.options,
     setOptions: options => {
       state.options = options;
-      fillIconKeys();
       applyAppearance();
     },
     getPreference,

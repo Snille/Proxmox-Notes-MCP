@@ -2,6 +2,7 @@
 // Host secrets go to the server once and are never read back.
 import { LAYOUTS } from '/format/index.mjs';
 import { LANGUAGES, t } from './i18n.js';
+import { addIcon, fontAwesomeNames, labelFromFile, listIcons, matches, openIconDialog, removeIcon, renameIcon, renderGrid } from './library.js';
 
 const $ = id => document.getElementById(id);
 
@@ -36,8 +37,29 @@ export function initSettings(context) {
   for (const button of document.querySelectorAll('.save-options')) {
     button.addEventListener('click', saveOptions);
   }
-  $('optHeaderIcons').addEventListener('input', renderHeaderIconPreview);
   $('importSelect').addEventListener('change', importSelect);
+  $('librarySearch').addEventListener('input', renderLibrary);
+  $('libraryUpload').addEventListener('change', async event => {
+    const files = [...event.target.files];
+    event.target.value = '';
+    await uploadFiles(files);
+  });
+  const drop = $('libraryDrop');
+  drop.addEventListener('dragover', event => { event.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', async event => {
+    event.preventDefault();
+    drop.classList.remove('over');
+    await uploadFiles([...event.dataTransfer.files].filter(file => file.type.startsWith('image/')));
+  });
+  $('btnDashboardIcons').addEventListener('click', async () => {
+    await openIconDialog({ el: ctx.el, toast: ctx.toast, size: iconSize(), mode: 'add', tab: 'dashboard' });
+    await loadLibrary();
+  });
+  $('btnImportSet').addEventListener('click', importIconSet);
+  $('btnAddHeaderIcon').addEventListener('click', openFaDialog);
+  $('faSearch').addEventListener('input', renderFaGrid);
+  $('faClose').addEventListener('click', () => $('faDialog').close());
   $('myTheme').addEventListener('change', e => { ctx.setPreference('theme', e.target.value); });
   $('myLanguage').addEventListener('change', e => { ctx.setPreference('language', e.target.value); });
 }
@@ -55,7 +77,7 @@ export async function openSettings() {
   draft = structuredClone(ctx.getOptions());
   fillOptionForms();
   closeHostForm();
-  await loadHosts();
+  await Promise.all([loadHosts(), loadLibrary()]);
 }
 
 // Re-renders the parts built in code after a language change.
@@ -66,6 +88,8 @@ export function refreshSettings() {
   $('optLayout').value = layout;
   fillAppearance();
   renderTemplate();
+  renderHeaderIcons();
+  renderLibrary();
   loadHosts();
 }
 
@@ -226,16 +250,155 @@ function fillOptionForms() {
   $('optIconHeight').value = draft.iconSet.height;
   $('optIconExt').value = draft.iconSet.extension;
   $('optImages').value = pairsToText(draft.images, 'label', 'key');
-  $('optHeaderIcons').value = pairsToText(draft.headerIcons, 'label', 'icon');
-  renderHeaderIconPreview();
+  renderHeaderIcons();
   renderTemplate();
   fillAppearance();
 }
 
-function renderHeaderIconPreview() {
-  const box = $('headerIconPreview');
-  box.replaceChildren(...textToPairs($('optHeaderIcons').value, 'label', 'icon').map(item =>
-    ctx.el('span', { class: 'icon-chip', title: item.icon }, [ctx.el('i', { class: `fa ${item.icon}` }), ` ${item.label}`])));
+// ---------- heading icons ----------
+
+function renderHeaderIcons() {
+  const box = $('headerIconChips');
+  box.replaceChildren(...draft.headerIcons.map((item, index) => ctx.el('span', { class: 'icon-chip', title: item.icon }, [
+    ctx.el('i', { class: `fa ${item.icon}` }),
+    ` ${item.label} `,
+    ctx.el('button', { type: 'button', class: 'chip-remove', title: t('remove'), 'aria-label': `${t('remove')} ${item.label}`, onclick: () => {
+      draft.headerIcons.splice(index, 1);
+      renderHeaderIcons();
+      fillDefaultHeaderIcon();
+    } }, [ctx.el('i', { class: 'fa fa-times' })])
+  ])));
+}
+
+function fillDefaultHeaderIcon() {
+  const current = $('optHeaderIcon').value || draft.template.headerIcon;
+  $('optHeaderIcon').replaceChildren(...draft.headerIcons.map(item => ctx.el('option', { value: item.icon, text: item.label })));
+  $('optHeaderIcon').value = current;
+}
+
+async function openFaDialog() {
+  $('faSearch').value = '';
+  $('faDialog').showModal();
+  await renderFaGrid();
+}
+
+async function renderFaGrid() {
+  const filter = $('faSearch').value.trim().toLowerCase();
+  const names = (await fontAwesomeNames()).filter(name => !filter || name.includes(filter));
+  $('faGrid').replaceChildren(...names.map(name => ctx.el('button', { type: 'button', class: 'fa-choice', title: `fa-${name}`, onclick: () => {
+    const label = prompt(t('lib.faLabel'), name.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()));
+    if (!label || !label.trim()) return;
+    if (!draft.headerIcons.some(item => item.icon === `fa-${name}`)) {
+      draft.headerIcons.push({ label: label.trim(), icon: `fa-${name}` });
+    }
+    renderHeaderIcons();
+    fillDefaultHeaderIcon();
+    $('faDialog').close();
+  } }, [ctx.el('i', { class: `fa fa-${name}` }), ctx.el('span', { text: name })])));
+}
+
+// ---------- icon library ----------
+
+let library = [];
+
+const iconSize = () => ({
+  width: Number($('optIconWidth').value) || draft?.iconSet.width || 100,
+  height: Number($('optIconHeight').value) || draft?.iconSet.height || 100
+});
+
+async function loadLibrary() {
+  try {
+    library = (await listIcons()).icons;
+    renderLibrary();
+  } catch (error) {
+    ctx.toast(error.message, 'bad');
+  }
+}
+
+function renderLibrary() {
+  const filter = $('librarySearch').value.trim();
+  const shown = library.filter(icon => matches(icon, filter));
+  $('libraryCount').textContent = t('lib.count', { shown: shown.length, total: library.length });
+  renderGrid($('libraryGrid'), shown, {
+    el: ctx.el,
+    emptyText: library.length ? t('lib.noMatch') : t('lib.empty'),
+    onRename: async (icon, label) => {
+      try {
+        await renameIcon(icon.id, label);
+        await loadLibrary();
+      } catch (error) {
+        ctx.toast(error.message, 'bad');
+      }
+    },
+    onRemove: async icon => {
+      try {
+        await removeIcon(icon.id);
+        ctx.toast(t('lib.removed', { name: icon.label }));
+        await loadLibrary();
+      } catch (error) {
+        ctx.toast(error.message, 'bad');
+      }
+    }
+  });
+}
+
+async function uploadFiles(files) {
+  let added = 0;
+  for (const file of files) {
+    try {
+      await addIcon({ label: labelFromFile(file.name), blob: file, source: 'upload', size: iconSize() });
+      added++;
+    } catch (error) {
+      ctx.toast(`${file.name}: ${error.message}`, 'bad');
+    }
+  }
+  if (added) ctx.toast(t('lib.uploaded', { count: added }));
+  await loadLibrary();
+}
+
+// Copies every listed icon from the web icon set into the library, skipping names already there.
+// The icon-set settings are saved first, because the server only fetches from the saved address.
+async function importIconSet() {
+  const progress = $('importProgress');
+  const images = textToPairs($('optImages').value, 'label', 'key').filter(image => image.key);
+  if (!$('optIconBase').value.trim() || !images.length) {
+    progress.className = 'small bad';
+    progress.textContent = t('lib.importNothing');
+    return;
+  }
+  try {
+    const saved = await request('PUT', '/api/options', collectOptions());
+    draft = structuredClone(saved);
+    ctx.setOptions(saved);
+  } catch (error) {
+    progress.className = 'small bad';
+    progress.textContent = error.message;
+    return;
+  }
+  const existing = new Set(library.map(icon => icon.source));
+  let done = 0;
+  let added = 0;
+  const failed = [];
+  progress.className = 'small';
+  for (const image of images) {
+    progress.textContent = t('lib.importing', { done, total: images.length });
+    const source = `icon-set:${image.key}`;
+    if (!existing.has(source)) {
+      try {
+        const response = await fetch(`/api/icon?key=${encodeURIComponent(image.key)}`);
+        if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error ?? response.statusText);
+        await addIcon({ label: image.label, blob: await response.blob(), source, size: iconSize() });
+        added++;
+      } catch {
+        failed.push(image.label);
+      }
+    }
+    done++;
+  }
+  progress.className = failed.length ? 'small bad' : 'small ok';
+  progress.textContent = t('lib.imported', { added, skipped: images.length - added - failed.length, failed: failed.length })
+    + (failed.length ? ` ${failed.join(', ')}` : '');
+  await loadLibrary();
 }
 
 function renderTemplate() {
@@ -297,7 +460,7 @@ function collectOptions() {
       extension: $('optIconExt').value.trim()
     },
     images: textToPairs($('optImages').value, 'label', 'key'),
-    headerIcons: textToPairs($('optHeaderIcons').value, 'label', 'icon'),
+    headerIcons: draft.headerIcons,
     template: { ...draft.template, headerIcon: $('optHeaderIcon').value },
     appearance: { theme: $('optTheme').value, language: $('optLanguage').value }
   };

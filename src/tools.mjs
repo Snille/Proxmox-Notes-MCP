@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import * as z from 'zod';
 import { DEFAULT_LAYOUT, fromLegacyJson, LAYOUTS, parseNotes, PROXMOX_DESCRIPTION_LIMIT, renderNotes, SCHEMA } from './format/index.mjs';
-import { iconSetUrl, newDocument } from './options.mjs';
+import { newDocument } from './options.mjs';
 import { applyFacts, guestFacts } from './proxmox/facts.mjs';
 import { version } from './version.mjs';
 
@@ -80,7 +80,18 @@ function log(event) {
   console.log(JSON.stringify({ level: 'info', time: new Date().toISOString(), ...event }));
 }
 
-export function buildTools({ options, proxmox, snapshots }) {
+const iconSchema = z.string().regex(/^[a-z0-9][a-z0-9-]*$/).optional().describe('Icon id from notes_icons');
+
+export function buildTools({ options, proxmox, snapshots, icons }) {
+  // An icon from the library as an embedded image, the same way the web editor embeds it.
+  const libraryImage = async id => {
+    if (!id) return null;
+    if (!icons) throw Object.assign(new Error('There is no icon library in this setup'), { statusCode: 400 });
+    const { icon, src } = await icons.dataUri(id);
+    const { width, height } = options.get().iconSet;
+    return { src, width: icon.width ?? width, height: icon.height ?? height, key: icon.id };
+  };
+
   // Single-use confirmations from notes_prepare_write, kept in memory only.
   const confirmations = new Map();
   const takeConfirmation = id => {
@@ -119,21 +130,29 @@ export function buildTools({ options, proxmox, snapshots }) {
     {
       name: 'notes_new',
       title: 'New Note',
-      description: 'Create a new Note document from the instance template. Optionally pick an icon-set image by key. Nothing is written to Proxmox.',
+      description: 'Create a new Note document from the instance template, optionally with an icon from the library (see notes_icons), embedded in the Note. Nothing is written to Proxmox.',
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
       inputSchema: z.object({
         title: z.string().default(''),
         headerIcon: z.string().optional(),
-        imageKey: z.string().optional().describe('Icon-set key from notes_options images, for example "sonarr01-"')
+        icon: iconSchema
       }).strict(),
-      handler: async ({ title, headerIcon, imageKey }) => {
-        const current = options.get();
-        const src = iconSetUrl(current.iconSet, imageKey);
-        if (imageKey && !src) {
-          throw new Error('No icon set is configured, so an image key cannot be used');
-        }
-        const image = src ? { src, width: current.iconSet.width, height: current.iconSet.height, key: imageKey } : null;
-        return { doc: newDocument(current, { title, headerIcon, image }) };
+      handler: async ({ title, headerIcon, icon }) => ({
+        doc: newDocument(options.get(), { title, headerIcon, image: await libraryImage(icon) })
+      })
+    },
+    {
+      name: 'notes_icons',
+      title: 'Icon library',
+      description: 'List the icons in the library (id and name). Pass an id as "icon" to notes_new or notes_prefill to embed it in a Note.',
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({ search: z.string().optional() }).strict(),
+      handler: async ({ search }) => {
+        const words = String(search ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+        const list = (icons?.list() ?? [])
+          .filter(icon => words.every(word => `${icon.id} ${icon.label}`.toLowerCase().includes(word)))
+          .map(icon => ({ id: icon.id, label: icon.label }));
+        return { icons: list };
       }
     },
     {
@@ -185,12 +204,12 @@ export function buildTools({ options, proxmox, snapshots }) {
     {
       name: 'notes_prefill',
       title: 'New Note from a guest',
-      description: 'Create a new Note document for one guest from the instance template, filled with what Proxmox knows (title, IP, MAC, DHCP, OS, and today as the date). Nothing is written to Proxmox.',
+      description: 'Create a new Note document for one guest from the instance template, filled with what Proxmox knows (title, IP, MAC, DHCP, OS, and today as the date), optionally with an icon from the library. Nothing is written to Proxmox.',
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
-      inputSchema: z.object({ host: hostSchema, vmid: vmidSchema }).strict(),
-      handler: async ({ host, vmid }) => {
+      inputSchema: z.object({ host: hostSchema, vmid: vmidSchema, icon: iconSchema }).strict(),
+      handler: async ({ host, vmid, icon }) => {
         const { guest, facts } = await readGuest(proxmox, host, vmid);
-        const doc = applyFacts(newDocument(options.get()), facts);
+        const doc = applyFacts(newDocument(options.get(), { image: await libraryImage(icon) }), facts);
         const today = new Date().toISOString().slice(0, 10);
         for (const row of doc.sections.flatMap(s => s.rows)) {
           if (row.type === 'field' && row.key === 'Date' && !row.value) {

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { loadSettings } from '../src/config.mjs';
+import { IconStore } from '../src/icons.mjs';
 import { OptionsStore } from '../src/options.mjs';
 import { createNotesServer } from '../src/server.mjs';
 import { Proxmox } from '../src/proxmox/index.mjs';
@@ -22,7 +23,8 @@ async function start(env = {}, prepare) {
   const settings = loadSettings({ DATA_DIR: dataDir, ...env });
   const options = await OptionsStore.open(dataDir);
   const proxmox = await Proxmox.open(join(dataDir, 'targets.json'));
-  server = createNotesServer({ settings, options, proxmox, tools: buildTools({ options, proxmox, snapshots: new SnapshotStore(dataDir) }) });
+  const icons = await IconStore.open(dataDir);
+  server = createNotesServer({ settings, options, proxmox, icons, tools: buildTools({ options, proxmox, icons, snapshots: new SnapshotStore(dataDir) }) });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   return { base: `http://127.0.0.1:${server.address().port}`, dataDir };
 }
@@ -99,9 +101,6 @@ describe('options', () => {
     expect(options.iconSet).toEqual({ baseUrl: 'https://icons.example.com/proxmox/icons/blue/100x100', width: 100, height: 100, extension: '.png' });
     expect(options.images).toContainEqual({ label: 'Default 01', key: 'default01-' });
     expect(options.headerIcons).toContainEqual({ label: 'Linux', icon: 'fa-linux' });
-
-    const created = await (await post(base, '/api/tools/notes_new', { title: 'Sonarr Server', imageKey: 'sonarr01-' })).json();
-    expect(created.doc.image.src).toBe('https://icons.example.com/proxmox/icons/blue/100x100/sonarr01-100x100.png');
   });
 
   it('saves options to options.json', async () => {
@@ -122,7 +121,7 @@ describe('MCP', () => {
     const client = new Client({ name: 'test', version: '1.0.0' });
     await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/mcp`)));
     const { tools } = await client.listTools();
-    expect(tools.map(t => t.name).sort()).toEqual(['notes_guests', 'notes_hosts', 'notes_import_legacy', 'notes_new', 'notes_options', 'notes_parse', 'notes_prefill', 'notes_prepare_write', 'notes_read', 'notes_render', 'notes_snapshot', 'notes_snapshots', 'notes_status', 'notes_write_confirmed']);
+    expect(tools.map(t => t.name).sort()).toEqual(['notes_guests', 'notes_hosts', 'notes_icons', 'notes_import_legacy', 'notes_new', 'notes_options', 'notes_parse', 'notes_prefill', 'notes_prepare_write', 'notes_read', 'notes_render', 'notes_snapshot', 'notes_snapshots', 'notes_status', 'notes_write_confirmed']);
     const result = await client.callTool({ name: 'notes_new', arguments: { title: 'Test' } });
     expect(result.structuredContent.doc.title).toBe('Test');
     await client.close();
@@ -137,7 +136,7 @@ describe('MCP', () => {
     await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/mcp`), {
       requestInit: { headers: { authorization: 'Bearer test-token-not-secret' } }
     }));
-    expect((await client.listTools()).tools.length).toBe(14);
+    expect((await client.listTools()).tools.length).toBe(15);
     await client.close();
   });
 });
@@ -208,5 +207,56 @@ describe('settings: select.json import', () => {
     expect(converted.images).toContainEqual({ label: 'Default 01', key: 'default01-' });
     await expect(readFile(join(dataDir, 'options.json'), 'utf8')).rejects.toThrow();
     expect((await post(base, '/api/settings/import-select', { selectJson: { nope: 1 } })).status).toBe(400);
+  });
+});
+
+describe('icon library', () => {
+  // Only the file signature is checked, so a RIFF/WEBP header is enough for a test icon.
+  const webp = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBPVP8 '), Buffer.alloc(24, 1)]);
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(24)]);
+  const upload = (base, body) => post(base, '/api/icons', body);
+
+  it('adds, lists, serves, renames and removes an icon', async () => {
+    const { base } = await start();
+    const added = await (await upload(base, { label: 'Sonarr', webp: webp.toString('base64'), original: png.toString('base64'), width: 100, height: 100, source: 'test' })).json();
+    expect(added.icon).toMatchObject({ id: 'sonarr', label: 'Sonarr', width: 100, original: { type: 'image/png' } });
+
+    const second = await (await upload(base, { label: 'Sonarr', webp: webp.toString('base64') })).json();
+    expect(second.icon.id).toBe('sonarr-2');
+
+    const listed = await (await fetch(`${base}/api/icons`)).json();
+    expect(listed.icons.map(icon => icon.id)).toEqual(['sonarr', 'sonarr-2']);
+    expect(listed.size).toEqual({ width: 100, height: 100 });
+
+    const image = await fetch(`${base}/api/icons/sonarr.webp`);
+    expect(image.headers.get('content-type')).toBe('image/webp');
+    expect(Buffer.from(await image.arrayBuffer()).equals(webp)).toBe(true);
+    expect((await fetch(`${base}/api/icons/sonarr/original`)).headers.get('content-type')).toBe('image/png');
+
+    const renamed = await fetch(`${base}/api/icons/sonarr`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ label: 'Sonarr TV' }) });
+    expect((await renamed.json()).icon.label).toBe('Sonarr TV');
+
+    expect((await fetch(`${base}/api/icons/sonarr-2`, { method: 'DELETE' })).status).toBe(200);
+    expect((await (await fetch(`${base}/api/icons`)).json()).icons.map(icon => icon.id)).toEqual(['sonarr']);
+    expect((await fetch(`${base}/api/icons/sonarr-2.webp`)).status).toBe(404);
+  });
+
+  it('refuses files that are not raster images, and odd ids', async () => {
+    const { base } = await start();
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>').toString('base64');
+    expect((await upload(base, { label: 'Bad', webp: svg })).status).toBe(400);
+    expect((await upload(base, { label: 'Bad', webp: webp.toString('base64'), original: svg })).status).toBe(400);
+    expect((await upload(base, { label: '', webp: webp.toString('base64') })).status).toBe(400);
+    expect((await fetch(`${base}/api/icons/..%2f..%2findex.webp`)).status).toBe(404);
+  });
+
+  it('embeds a library icon in a new Note over MCP and REST', async () => {
+    const { base } = await start();
+    await upload(base, { label: 'Radarr', webp: webp.toString('base64'), width: 100, height: 100 });
+    const listed = await (await post(base, '/api/tools/notes_icons', { search: 'rad' })).json();
+    expect(listed.icons).toEqual([{ id: 'radarr', label: 'Radarr' }]);
+    const created = await (await post(base, '/api/tools/notes_new', { title: 'Radarr Server', icon: 'radarr' })).json();
+    expect(created.doc.image).toEqual({ src: `data:image/webp;base64,${webp.toString('base64')}`, width: 100, height: 100, key: 'radarr' });
+    expect((await post(base, '/api/tools/notes_new', { title: 'x', icon: 'missing' })).status).toBe(404);
   });
 });

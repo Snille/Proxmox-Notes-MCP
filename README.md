@@ -2,7 +2,7 @@
 
 A self-hosted service that creates, reads and edits the Notes (description) of Proxmox LXC containers and VMs. It has a web GUI, a REST API and an MCP server, and it replaces the browser-only [Proxmox Notes Generator](https://github.com/Snille/Proxmox-Notes).
 
-Status: **0.7.0, early development.** The Notes format, the server (REST, MCP, Docker), reading and writing Notes in Proxmox, the web GUI and its settings page work, in English and Swedish. Icon generation is not built yet.
+Status: **0.8.0, early development.** The Notes format, the server (REST, MCP, Docker), reading and writing Notes in Proxmox, the web GUI with its settings page (English and Swedish) and the icon library work. Icon generation with AI is not built yet.
 
 ## What it will do
 
@@ -19,7 +19,7 @@ Status: **0.7.0, early development.** The Notes format, the server (REST, MCP, D
 |----------|--------|-----|
 | Where it runs | Its own Docker container, one independent instance per site | Anyone can run their own copy (home, work, other people). No dependency on another service. |
 | Publishing | Public GitHub repository | Others can use it. Nothing site-specific may be in the code or the repository; it goes in configuration. |
-| Icons | Embedded as WebP (`data:` URI) by default, URL as an option | Proxmox shows embedded raster images (tested 2026-10-17). SVG cannot be embedded. See [docs/NOTES_FORMAT.md](docs/NOTES_FORMAT.md). |
+| Icons | An icon library in the service; icons are always embedded as WebP (`data:` URI). A web icon set is only an import source. | Proxmox shows embedded raster images (tested 2026-10-17), so no web server is needed. SVG cannot be embedded. See [docs/NOTES_FORMAT.md](docs/NOTES_FORMAT.md). |
 | Language | Node.js 22+, plain ES modules, Vitest | Same stack as the original generator logic, so it ports directly. |
 | Layout | One full-width HTML table with the header inside; the old Markdown layout is still read and can be chosen | It fills the Proxmox Notes panel and gets the alternating row colours (tested in Proxmox 2026-10-17). |
 | Data model | One JSON document per Note | The web GUI, REST, MCP and JSON export all use the same model; Markdown is rendered from it. |
@@ -81,7 +81,8 @@ The guests' facts come from their config: hostname, IP (static, or the DHCP addr
 - **Editor**: heading icon and title, icon image, description, notes and the sections with their rows (add, move, remove). A guest with no Notes gets a new Note filled in from the template and from Proxmox. Notes that do not follow the format open as raw text, so nothing is lost.
 - **Live preview**, rendered by the same code as the server, cleaned the way current Proxmox versions clean Notes (inline styles removed, only safe tags, attributes and URLs) and styled with Proxmox's own Notes CSS in a panel of the same fixed width. A bar shows the size against the 8192-character limit, and a badge shows when the Note differs from what Proxmox has.
 - **Layout**: full-width table (default) or the old Markdown layout. A Note stored in the other layout is converted when it is saved, and the editor says so.
-- **Icons**: choose one from the icon set, upload an image, or none. By default the icon is embedded as WebP, sized to fit the space left in the Note; untick *Embed* to link to the icon set instead.
+- **Icons**: **Choose icon** opens the icon library as a searchable grid, with a second tab for dashboard-icons. An uploaded image is added to the library first. The icon is always embedded; if the Note has too little room left, it is encoded again at a lower quality.
+- **Icon library** (Settings → Icons): a grid of every icon with search, rename and remove; upload several files or drop them on the page; add icons from [dashboard-icons](https://github.com/homarr-labs/dashboard-icons) by searching for them; import a whole web icon set once (for example the old Notes Generator's, from its `select.json`), after which that web server is no longer needed. Heading icons are chips, added from a searchable list of all 786 Font Awesome 4 icons.
 - **From Proxmox**: one button updates IP, MAC, DHCP and OS from the guest's config. When the IP changes, service links that pointed at the old IP move along. An exact OS release in the Note ("Debian 13") is kept when Proxmox only knows the family ("Debian").
 - **Import and export**: export a Note as JSON; import JSON from this tool or from the old Notes Generator, or Markdown. **Copy Markdown** puts the text on the clipboard for the Proxmox Notes field.
 - **Save to Proxmox**: a dialog shows the Notes now in Proxmox and the Notes that will be written, side by side, before anything is written. **History** lists the snapshots kept before each save.
@@ -99,7 +100,7 @@ With Docker Compose or as a Portainer stack, using [compose.yaml](compose.yaml):
 docker compose up -d
 ```
 
-Then open `http://<host>:8080/`. The container keeps its data (options, later snapshots and icons) in the volume mounted at `/data`.
+Then open `http://<host>:8080/`. The container keeps its data (options, hosts, snapshots and the icon library) in the volume mounted at `/data`.
 
 The published image is not set up yet (step 7). Until then, build it locally with [compose.dev.yaml](compose.dev.yaml), which serves on port 8085. It mounts `DEV_DATA_DIR` (default `private/dev-data`) at `/data` and `DEV_SECRETS_DIR` (default `private/secrets`) read-only at `/run/secrets/proxmox-notes`:
 
@@ -134,7 +135,9 @@ The host settings (`/api/settings/...`) are offered in the web GUI and REST only
 | Path | What |
 |------|------|
 | `/` | Web GUI |
-| `/api/icon?key=<key>` | An icon from the configured icon set, fetched by the server so the browser can embed it. Only URLs built from the icon set are fetched. |
+| `/api/icons` | The icon library: `GET` lists, `POST` adds (a WebP drawn by the browser plus the original, as base64), `PATCH`/`DELETE /api/icons/<id>` rename and remove, `GET /api/icons/<id>.webp` serves one |
+| `/api/dashboard-icons?q=<words>` | Searches the names in dashboard-icons; `GET /api/dashboard-icons/<name>.png` fetches one through the server |
+| `/api/icon?key=<key>` | An icon from the configured web icon set, for the import. Only URLs built from that icon set are fetched. |
 | `/api/tools/{name}` | REST: `POST` a tool's arguments as JSON |
 | `/api/options` | `GET` or `PUT` the options |
 | `/mcp` | MCP over Streamable HTTP |
@@ -142,7 +145,7 @@ The host settings (`/api/settings/...`) are offered in the web GUI and REST only
 
 MCP over stdio, for an assistant on the same machine: `node src/stdio.mjs`.
 
-Tools: `notes_status`, `notes_options`, `notes_hosts`, `notes_guests`, `notes_read`, `notes_prefill`, `notes_new`, `notes_render`, `notes_parse`, `notes_import_legacy`, `notes_prepare_write`, `notes_write_confirmed`, `notes_snapshots`, `notes_snapshot`. Only `notes_write_confirmed` writes to Proxmox, and only with a confirmation from `notes_prepare_write`.
+Tools: `notes_status`, `notes_options`, `notes_icons`, `notes_hosts`, `notes_guests`, `notes_read`, `notes_prefill`, `notes_new`, `notes_render`, `notes_parse`, `notes_import_legacy`, `notes_prepare_write`, `notes_write_confirmed`, `notes_snapshots`, `notes_snapshot`. Only `notes_write_confirmed` writes to Proxmox, and only with a confirmation from `notes_prepare_write`.
 
 ## Development
 
@@ -161,7 +164,8 @@ npm run check
 | `src/server.mjs`, `src/mcp.mjs`, `src/tools.mjs` | HTTP server, MCP server and the tools both use |
 | `src/options.mjs`, `src/config.mjs` | Instance options (`/data/options.json`) and environment settings |
 | `src/proxmox/` | Targets (`targets.json`), the API client with certificate pinning, and guest facts |
-| `src/web/` | The web GUI: `app.js`, `preview.js` (Proxmox-like rendering and sanitizing), `icons.js` (embedding), bundled Font Awesome |
+| `src/icons.mjs`, `src/dashboard-icons.mjs` | The icon library (`/data/icons`) and the dashboard-icons search |
+| `src/web/` | The web GUI: `app.js`, `settings.js`, `library.js` (icon library and picker), `preview.js` (Proxmox-like rendering and sanitizing), `icons.js` (embedding within the size limit), `i18n.js` (texts), bundled Font Awesome |
 | `test/` | Vitest tests |
 | `reference/examples/` | Eleven real Notes with addresses and names replaced, used as golden test files |
 | `reference/select.json` | The old generator's options file (icons, image keys, OS names) |
@@ -176,7 +180,7 @@ npm run check
 3. ✅ Proxmox: list guests on several hosts, read Notes, prefill from facts, write with preview, digest check and snapshot.
 4. ✅ Web GUI: guest list, editor with live preview, icons, JSON export and import, save to Proxmox, history.
 5. ✅ Settings page in the web GUI: Proxmox hosts, Notes defaults and template, icons, theme and language. The image generator settings come with icon generation (step 7).
-6. Icons: icon library, embed from file or URL, dashboard-icons.
+6. ✅ Icons: icon library, upload, dashboard-icons, import of a web icon set, icon picker in the editor.
 7. Icon generation: ComfyUI first, then the cloud services one at a time.
 8. Release: licence, container image built by GitHub Actions, ready-made Portainer stack.
 

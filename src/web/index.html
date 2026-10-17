@@ -58,13 +58,13 @@
               <div class="icon-panel">
                 <div class="icon-thumb" id="iconThumb"><i class="fa fa-picture-o"></i></div>
                 <div class="icon-controls">
-                  <label class="label"><span data-i18n="fromIconSet">From the icon set</span><select id="iconKey"></select></label>
-                  <label class="check"><input id="embed" type="checkbox" checked> <span data-i18n="embed">Embed in the Note (no web server needed)</span></label>
                   <div class="row-buttons">
-                    <label class="button small"><i class="fa fa-image"></i> <span data-i18n="upload">Upload image</span><input id="iconUpload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden></label>
-                    <button id="btnIconRemove" type="button" class="small"><i class="fa fa-times"></i> <span data-i18n="noIcon">No icon</span></button>
+                    <button id="btnPickIcon" type="button"><i class="fa fa-th"></i> <span data-i18n="pickIcon">Choose icon</span></button>
+                    <label class="button"><i class="fa fa-upload"></i> <span data-i18n="upload">Upload image</span><input id="iconUpload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden></label>
+                    <button id="btnIconRemove" type="button"><i class="fa fa-times"></i> <span data-i18n="noIcon">No icon</span></button>
                   </div>
                   <p id="iconInfo" class="muted small"></p>
+                  <p class="muted small" data-i18n="iconHelp">The icon is embedded in the Note, so Proxmox shows it without a web server. Uploaded images are added to the icon library.</p>
                 </div>
               </div>
             </fieldset>
@@ -190,26 +190,48 @@ pvenode cert info</pre>
 
     <section class="settings-page" data-settings-page="icons" hidden>
       <h2 data-i18n="set.icons">Icons</h2>
+
       <fieldset>
-        <legend data-i18n="set.iconSet">Icon set on a web server (optional)</legend>
-        <p class="small" data-i18n="set.iconSetHelp">Images are found at address/key + width x height + extension, for example …/sonarr01-100x100.png. Embedded icons are drawn at this size too.</p>
-        <label class="label"><span data-i18n="set.iconBase">Address</span><input id="optIconBase" type="text" autocomplete="off" placeholder="https://icons.example.com/blue/100x100"></label>
-        <div class="grid-3">
-          <label class="label"><span data-i18n="set.width">Width</span><input id="optIconWidth" type="number" min="16" max="512"></label>
-          <label class="label"><span data-i18n="set.height">Height</span><input id="optIconHeight" type="number" min="16" max="512"></label>
-          <label class="label"><span data-i18n="set.extension">Extension</span><input id="optIconExt" type="text"></label>
+        <legend data-i18n="lib.title">Icon library</legend>
+        <p class="small" data-i18n="lib.help">The icons you can put in a Note. They are kept in this service and embedded in each Note, so Proxmox needs no web server for them.</p>
+        <div class="library-toolbar">
+          <input id="librarySearch" type="search" data-i18n-placeholder="lib.search" data-i18n-aria-label="lib.search">
+          <span id="libraryCount" class="muted small"></span>
+          <span class="spacer"></span>
+          <label class="button"><i class="fa fa-upload"></i> <span data-i18n="lib.upload">Upload</span><input id="libraryUpload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden></label>
+          <button id="btnDashboardIcons" type="button"><i class="fa fa-th-large"></i> <span data-i18n="lib.dashboard">From dashboard-icons</span></button>
         </div>
-        <label class="label"><span data-i18n="set.images">Images: one per line, "Label = key"</span><textarea id="optImages" rows="8" spellcheck="false"></textarea></label>
+        <div id="libraryDrop" class="drop-zone" data-i18n="lib.drop">Drop image files here</div>
+        <div id="libraryGrid" class="icon-grid"></div>
+        <div class="grid-3 size-row">
+          <label class="label"><span data-i18n="lib.width">Width of new icons</span><input id="optIconWidth" type="number" min="16" max="512"></label>
+          <label class="label"><span data-i18n="lib.height">Height of new icons</span><input id="optIconHeight" type="number" min="16" max="512"></label>
+          <div class="row-buttons end"><button type="button" class="save-options"><i class="fa fa-check"></i> <span data-i18n="set.save">Save settings</span></button></div>
+        </div>
       </fieldset>
+
       <fieldset>
         <legend data-i18n="set.headerIcons">Heading icons</legend>
-        <label class="label"><span data-i18n="set.headerIconsHelp">One per line, "Label = Font Awesome 4 class"</span><textarea id="optHeaderIcons" rows="8" spellcheck="false"></textarea></label>
-        <div id="headerIconPreview" class="icon-preview"></div>
+        <p class="small" data-i18n="lib.headerHelp">The Font Awesome icons offered for the heading of a Note.</p>
+        <div id="headerIconChips" class="chips"></div>
+        <div class="row-buttons">
+          <button id="btnAddHeaderIcon" type="button"><i class="fa fa-plus"></i> <span data-i18n="lib.addHeaderIcon">Choose from all icons</span></button>
+          <button type="button" class="primary save-options"><i class="fa fa-check"></i> <span data-i18n="set.save">Save settings</span></button>
+        </div>
       </fieldset>
-      <div class="row-buttons">
-        <label class="button"><i class="fa fa-upload"></i> <span data-i18n="set.importSelect">Import select.json from the old Notes Generator</span><input id="importSelect" type="file" accept=".json,application/json" hidden></label>
-        <button type="button" class="primary save-options"><i class="fa fa-check"></i> <span data-i18n="set.save">Save settings</span></button>
-      </div>
+
+      <details class="help" id="importDetails">
+        <summary data-i18n="lib.importTitle">Import from a web icon set (for example the old Notes Generator's)</summary>
+        <p class="small" data-i18n="lib.importHelp">Copies icons from a web server into the library once. Images are found at address/key + width x height + extension, for example …/sonarr01-100x100.png. After the import the web server is no longer needed.</p>
+        <label class="label"><span data-i18n="set.iconBase">Address</span><input id="optIconBase" type="text" autocomplete="off" placeholder="https://icons.example.com/blue/100x100"></label>
+        <label class="label"><span data-i18n="set.extension">Extension</span><input id="optIconExt" type="text"></label>
+        <label class="label"><span data-i18n="set.images">Images: one per line, "Label = key"</span><textarea id="optImages" rows="8" spellcheck="false"></textarea></label>
+        <div class="row-buttons">
+          <label class="button"><i class="fa fa-file-code-o"></i> <span data-i18n="set.importSelect">Read select.json from the old Notes Generator</span><input id="importSelect" type="file" accept=".json,application/json" hidden></label>
+          <button id="btnImportSet" type="button" class="primary"><i class="fa fa-download"></i> <span data-i18n="lib.importRun">Import into the library</span></button>
+        </div>
+        <p id="importProgress" class="small"></p>
+      </details>
     </section>
 
     <section class="settings-page" data-settings-page="appearance" hidden>
@@ -231,6 +253,42 @@ pvenode cert info</pre>
       </fieldset>
     </section>
   </div>
+
+  <dialog id="iconDialog" class="dialog" aria-labelledby="iconDialogTitle">
+    <h2 id="iconDialogTitle"></h2>
+    <nav class="dialog-tabs">
+      <button type="button" data-icon-tab="library" class="active"><i class="fa fa-th"></i> <span data-i18n="lib.title">Icon library</span></button>
+      <button type="button" data-icon-tab="dashboard"><i class="fa fa-th-large"></i> <span data-i18n="lib.dashboardTab">dashboard-icons</span></button>
+    </nav>
+    <div id="iconTabLibrary">
+      <div class="library-toolbar">
+        <input id="iconDialogSearch" type="search" data-i18n-placeholder="lib.search" data-i18n-aria-label="lib.search">
+        <span class="spacer"></span>
+        <label class="button"><i class="fa fa-upload"></i> <span data-i18n="lib.upload">Upload</span><input id="iconDialogUpload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden></label>
+      </div>
+      <div id="iconDialogGrid" class="icon-grid scroll"></div>
+    </div>
+    <div id="iconTabDashboard" hidden>
+      <div class="library-toolbar">
+        <input id="dashboardSearch" type="search" data-i18n-placeholder="lib.dashboardSearch" data-i18n-aria-label="lib.dashboardSearch">
+        <span id="dashboardCount" class="muted small"></span>
+      </div>
+      <p class="muted small" data-i18n="lib.dashboardHelp">Icons from the open dashboard-icons set (github.com/homarr-labs/dashboard-icons). Clicking one copies it into your library.</p>
+      <div id="dashboardGrid" class="icon-grid scroll"></div>
+    </div>
+    <div class="row-buttons end">
+      <button id="iconDialogClose" type="button" data-i18n="close">Close</button>
+    </div>
+  </dialog>
+
+  <dialog id="faDialog" class="dialog narrow" aria-labelledby="faDialogTitle">
+    <h2 id="faDialogTitle" data-i18n="lib.faTitle">Choose a heading icon</h2>
+    <input id="faSearch" type="search" data-i18n-placeholder="lib.faSearch" data-i18n-aria-label="lib.faSearch">
+    <div id="faGrid" class="fa-grid"></div>
+    <div class="row-buttons end">
+      <button id="faClose" type="button" data-i18n="close">Close</button>
+    </div>
+  </dialog>
 
   <dialog id="saveDialog" class="dialog" aria-labelledby="saveTitle">
     <h2 id="saveTitle"><i class="fa fa-floppy-o"></i> <span data-i18n="save">Save to Proxmox</span></h2>
