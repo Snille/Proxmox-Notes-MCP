@@ -215,12 +215,14 @@ describe('table layout (default)', () => {
     expect(renderNotes(doc)).toContain('Run <strong>update</strong> as root');
   });
 
-  it('keeps an empty icon cell and a custom section', () => {
+  it('lets the header span both columns when there is no icon, and keeps a custom section', () => {
     const doc = emptyDocument();
     doc.title = 'No icon';
     doc.sections = [{ id: 'storage', title: 'Storage', icon: 'fa-hdd-o fa-fw', rows: [text('Data on /mnt/data'), field('Disk', '16 GiB')] }];
     const table = renderNotes(doc);
-    expect(table.split('\n')[1]).toMatch(/^<tr><td width="110"><\/td>/);
+    expect(table.split('\n')[1]).toMatch(/^<tr><td colspan="2"><h1><i class="fa fa-linux"><\/i> No icon<\/h1>/);
+    expect(table.split('\n')[3]).toMatch(/^<tr><td width="110"><i class="fa fa-hdd-o fa-fw"><\/i> <strong>Storage:<\/strong><\/td>/);
+    expect(table.split('\n')[4]).toMatch(/^<tr><td><\/td>/);
     expect(parseNotes(table).doc).toEqual(doc);
   });
 

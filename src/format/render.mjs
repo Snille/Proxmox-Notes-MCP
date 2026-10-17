@@ -87,16 +87,25 @@ function renderTableImage(image, title) {
 
 // No blank line may appear inside: a blank line ends an HTML block, and Markdown would take over.
 function renderTable(doc) {
-  const labelWidth = (doc.image?.width ?? 100) + 10;
+  const header = `<h1><i class="fa ${doc.headerIcon}"></i> ${toHtmlLine(doc.title)}</h1><i class="fa ${DESCRIPTION_ICON}"></i> ${toHtmlLine(doc.description)}`;
+  // Without an icon the header spans both columns, so the title starts at the left edge.
+  const top = doc.image?.src
+    ? `<tr><td width="${(doc.image.width ?? 100) + 10}">${renderTableImage(doc.image, doc.title)}</td><td>${header}</td></tr>`
+    : `<tr><td colspan="2">${header}</td></tr>`;
   const lines = [
     '<table width="100%">',
-    `<tr><td width="${labelWidth}">${renderTableImage(doc.image, doc.title)}</td><td><h1><i class="fa ${doc.headerIcon}"></i> ${toHtmlLine(doc.title)}</h1><i class="fa ${DESCRIPTION_ICON}"></i> ${toHtmlLine(doc.description)}</td></tr>`,
+    top,
     `<tr><td colspan="2"><h3><i class="fa ${NOTES_ICON}"></i> Notes:</h3>${toHtmlLine(doc.notes)}</td></tr>`
   ];
+  // Without an icon no row sets the label column's width; the first section row does it instead,
+  // or the browser splits the full width evenly between the two columns.
+  let widthPending = !doc.image?.src;
   for (const section of doc.sections ?? []) {
     section.rows.forEach((row, index) => {
       const label = index === 0 ? `<i class="fa ${section.icon}"></i> <strong>${section.title}:</strong>` : '';
-      lines.push(`<tr><td>${label}</td><td>${renderTableRow(row)}</td></tr>`);
+      const cell = widthPending ? '<td width="110">' : '<td>';
+      widthPending = false;
+      lines.push(`<tr>${cell}${label}</td><td>${renderTableRow(row)}</td></tr>`);
     });
   }
   lines.push('</table>');

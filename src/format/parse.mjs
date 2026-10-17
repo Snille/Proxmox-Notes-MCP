@@ -143,7 +143,11 @@ function parseTableLayout(lines) {
   if (!TABLE_END.test(lines[last] ?? '')) {
     return fail(last, 'The table does not end with </table> on its own line');
   }
-  const top = cellsOf(lines[1]);
+  let top = cellsOf(lines[1]);
+  if (top?.length === 1) {
+    // No icon: the heading cell spans both columns.
+    top = ['', top[0]];
+  }
   if (!top || top.length !== 2) {
     return fail(1, 'The first row is not an icon cell and a heading cell');
   }

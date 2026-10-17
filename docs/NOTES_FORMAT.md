@@ -48,6 +48,7 @@ Rules:
 
 - One row per line and **no blank line** inside: a blank line ends an HTML block, and Markdown would take over.
 - The first column is the icon width plus 10 px, so the section labels line up under the icon.
+- Without an icon the header cell spans both columns (`<td colspan="2">`), so the title starts at the left edge. The first section label cell then carries `width="110"`, or the browser would split the width evenly between the columns.
 - Bold is `<strong>`: Proxmox's CSS makes only `<strong>` bold, and Markdown (`**x**`) is not parsed inside an HTML block. `**x**` and `<b>` in text are written as `<strong>`.
 - Proxmox's table CSS (`.pmx-md tbody tr:nth-of-type(even)`) applies to every row, so the rows alternate in colour. Tested in Proxmox on 2026-10-17: the table fills the panel and the rows alternate.
 

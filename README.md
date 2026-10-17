@@ -2,7 +2,7 @@
 
 A self-hosted service that creates, reads and edits the Notes (description) of Proxmox LXC containers and VMs. It has a web GUI, a REST API and an MCP server, and it replaces the browser-only [Proxmox Notes Generator](https://github.com/Snille/Proxmox-Notes).
 
-Status: **0.5.0, early development.** The Notes format, the server (REST, MCP, Docker), reading from Proxmox and the web GUI work. Writing to Proxmox and icon generation are not built yet: for now, copy the Markdown into Proxmox by hand.
+Status: **0.5.1, early development.** The Notes format, the server (REST, MCP, Docker), reading from Proxmox and the web GUI work. Writing to Proxmox and icon generation are not built yet: for now, copy the Markdown into Proxmox by hand.
 
 ## What it will do
 
