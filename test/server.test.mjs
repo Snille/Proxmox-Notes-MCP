@@ -260,3 +260,21 @@ describe('icon library', () => {
     expect((await post(base, '/api/tools/notes_new', { title: 'x', icon: 'missing' })).status).toBe(404);
   });
 });
+
+describe('icon library: replace', () => {
+  const webp = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBPVP8 '), Buffer.alloc(24, 1)]);
+  const webp2 = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBPVP8 '), Buffer.alloc(30, 2)]);
+
+  it('replaces an icon with the same name instead of adding a copy, keeping its id and name', async () => {
+    const { base } = await start();
+    await post(base, '/api/icons', { label: 'Sonarr 01', webp: webp.toString('base64') });
+    const replaced = await (await post(base, '/api/icons', { label: 'sonarr 01', webp: webp2.toString('base64'), replace: true })).json();
+    expect(replaced.icon).toMatchObject({ id: 'sonarr-01', label: 'Sonarr 01', replaced: true });
+    const listed = await (await fetch(`${base}/api/icons`)).json();
+    expect(listed.icons).toHaveLength(1);
+    expect(Buffer.from(await (await fetch(`${base}/api/icons/sonarr-01.webp`)).arrayBuffer()).equals(webp2)).toBe(true);
+
+    const copy = await (await post(base, '/api/icons', { label: 'Sonarr 01', webp: webp.toString('base64') })).json();
+    expect(copy.icon.id).toBe('sonarr-01-2');
+  });
+});

@@ -55,7 +55,7 @@ async function drawWebp(blob, width, height) {
   return webp;
 }
 
-export async function addIcon({ label, blob, source, size }) {
+export async function addIcon({ label, blob, source, size, replace = false }) {
   const webp = await drawWebp(blob, size.width, size.height);
   return (await request('POST', '/api/icons', {
     label,
@@ -63,11 +63,21 @@ export async function addIcon({ label, blob, source, size }) {
     original: blob.size <= MAX_ORIGINAL_BYTES ? await base64(blob) : undefined,
     width: size.width,
     height: size.height,
-    source
+    source,
+    replace
   })).icon;
 }
 
-export const labelFromFile = name => name.replace(/\.[a-z0-9]+$/i, '').replace(/[_-]+/g, ' ').trim() || 'Icon';
+// "sonarr01-512x512.png" -> key "sonarr01". A size suffix is dropped, also a mistyped one such as
+// "-512x1512". The name comes from the icon-set list when the key is in it ("Sonarr 01"), or is
+// made from the key ("deluge03" -> "Deluge 03").
+export function labelFromFile(fileName, images = []) {
+  const key = fileName.replace(/\.[a-z0-9]+$/i, '').replace(/-\d+x\d+$/i, '');
+  const known = images.find(image => image.key.replace(/-$/, '').toLowerCase() === key.toLowerCase());
+  if (known) return known.label;
+  const words = key.replace(/[_-]+/g, ' ').replace(/([a-z])(\d+)$/i, '$1 $2').trim();
+  return words ? words.replace(/\b\w/g, c => c.toUpperCase()) : 'Icon';
+}
 export const labelFromName = name => name.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
 // ---------- the grid ----------
@@ -118,7 +128,7 @@ let picker = null;
  * dialog open so several dashboard-icons can be added to the library. Returns a promise of the
  * chosen icon, or null when the dialog is closed.
  */
-export function openIconDialog({ el, toast, size, mode = 'pick', tab = 'library' }) {
+export function openIconDialog({ el, toast, size, images = [], mode = 'pick', tab = 'library' }) {
   const dialog = document.getElementById('iconDialog');
   const state = { icons: [], resolve: null };
   picker = state;
@@ -205,7 +215,7 @@ export function openIconDialog({ el, toast, size, mode = 'pick', tab = 'library'
     let last = null;
     for (const file of files) {
       try {
-        last = await addIcon({ label: labelFromFile(file.name), blob: file, source: 'upload', size });
+        last = await addIcon({ label: labelFromFile(file.name, images), blob: file, source: `upload:${file.name}`, size });
         state.icons.push(last);
       } catch (error) {
         toast(`${file.name}: ${error.message}`, 'bad');

@@ -1,5 +1,10 @@
 # History
 
+## 0.8.1 - 2026-10-17
+
+- Uploading a folder of icons works as an import: the name comes from the file name without its size suffix (also a mistyped one such as `-512x1512`), from the icon-set list when the key is in it ("Sonarr 01") or made from the key ("deluge03" becomes "Deluge 03"). With **Replace icons with the same name** (on by default in the settings) an upload replaces the icon with that name, keeping its id and name, instead of adding a copy. A progress line shows how far a large upload has come.
+- Used to load Erik's full blue icon set from its 512 px originals: 35 icons replaced, 7 added (6 that were not in the old select.json, plus one mistyped file name that was merged by hand).
+
 ## 0.8.0 - 2026-10-17
 
 - An icon library in the service (`/data/icons`), which replaces the web icon set as the source of icons. Erik's decision: icons are always embedded; a web icon set is only imported once, and link mode is gone. Each icon is kept as a WebP drawn by the browser at the instance's icon size (ready to embed) plus the uploaded original. The server only checks file signatures (PNG, JPEG, GIF, WebP; SVG refused), so it needs no image library.

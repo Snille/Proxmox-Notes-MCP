@@ -74,7 +74,9 @@ export class IconStore {
     return { icon, src: `data:image/webp;base64,${data.toString('base64')}` };
   }
 
-  async add({ label, webp, original, width, height, source }) {
+  // With replace, an icon whose id the name gives already exists is replaced in place (same id and
+  // name, new image), so importing a set again updates it instead of making copies.
+  async add({ label, webp, original, width, height, source, replace = false }) {
     const name = String(label ?? '').trim();
     if (!name || name.length > 80) throw badRequest('An icon needs a name of 1 to 80 characters');
     const icon = Buffer.from(String(webp ?? ''), 'base64');
@@ -90,13 +92,18 @@ export class IconStore {
       originalFile = { ext: type.ext, type: type.type };
     }
     let id = iconId(name);
-    for (let n = 2; this.icons.some(entry => entry.id === id); n++) {
-      id = `${iconId(name).slice(0, 46)}-${n}`;
+    const existing = replace ? this.icons.find(entry => entry.id === id) : null;
+    if (!existing) {
+      for (let n = 2; this.icons.some(entry => entry.id === id); n++) {
+        id = `${iconId(name).slice(0, 46)}-${n}`;
+      }
+    } else if (existing.original) {
+      await unlink(join(this.dir, existing.original.file)).catch(() => {});
     }
     await writeFile(join(this.dir, `${id}.webp`), icon);
     const entry = {
       id,
-      label: name,
+      label: existing?.label ?? name,
       width: Number(width) || null,
       height: Number(height) || null,
       bytes: icon.length,
@@ -106,6 +113,12 @@ export class IconStore {
     if (originalFile) {
       entry.original = { file: `${id}.orig.${originalFile.ext}`, type: originalFile.type, bytes: originalBuffer.length };
       await writeFile(join(this.dir, entry.original.file), originalBuffer);
+    }
+    if (existing) {
+      entry.addedAt = existing.addedAt;
+      entry.updatedAt = new Date().toISOString();
+      await this.save(this.icons.map(item => (item.id === id ? entry : item)));
+      return { ...entry, replaced: true };
     }
     await this.save([...this.icons, entry]);
     return entry;

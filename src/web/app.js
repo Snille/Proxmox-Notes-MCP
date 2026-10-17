@@ -482,7 +482,7 @@ async function embedLibraryIcon(icon) {
 }
 
 async function pickIcon() {
-  const icon = await openIconDialog({ el, toast, size: iconSize(), mode: 'pick' });
+  const icon = await openIconDialog({ el, toast, size: iconSize(), images: state.options?.images, mode: 'pick' });
   if (!icon) return;
   try {
     await embedLibraryIcon(icon);
@@ -690,7 +690,7 @@ function bindInputs() {
     e.target.value = '';
     if (!file) return;
     try {
-      const icon = await addIcon({ label: labelFromFile(file.name), blob: file, source: 'upload', size: iconSize() });
+      const icon = await addIcon({ label: labelFromFile(file.name, state.options?.images), blob: file, source: `upload:${file.name}`, size: iconSize() });
       toast(t('lib.added', { name: icon.label }));
       await embedLibraryIcon(icon);
     } catch (error) {

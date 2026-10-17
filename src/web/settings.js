@@ -53,7 +53,7 @@ export function initSettings(context) {
     await uploadFiles([...event.dataTransfer.files].filter(file => file.type.startsWith('image/')));
   });
   $('btnDashboardIcons').addEventListener('click', async () => {
-    await openIconDialog({ el: ctx.el, toast: ctx.toast, size: iconSize(), mode: 'add', tab: 'dashboard' });
+    await openIconDialog({ el: ctx.el, toast: ctx.toast, size: iconSize(), images: draft.images, mode: 'add', tab: 'dashboard' });
     await loadLibrary();
   });
   $('btnImportSet').addEventListener('click', importIconSet);
@@ -344,15 +344,20 @@ function renderLibrary() {
 
 async function uploadFiles(files) {
   let added = 0;
-  for (const file of files) {
+  let replaced = 0;
+  const progress = $('libraryProgress');
+  for (const [index, file] of files.entries()) {
+    progress.textContent = files.length > 1 ? t('lib.uploading', { done: index, total: files.length }) : '';
     try {
-      await addIcon({ label: labelFromFile(file.name), blob: file, source: 'upload', size: iconSize() });
-      added++;
+      const icon = await addIcon({ label: labelFromFile(file.name, draft.images), blob: file, source: `upload:${file.name}`, size: iconSize(), replace: $('libraryReplace').checked });
+      if (icon.replaced) replaced++;
+      else added++;
     } catch (error) {
       ctx.toast(`${file.name}: ${error.message}`, 'bad');
     }
   }
-  if (added) ctx.toast(t('lib.uploaded', { count: added }));
+  progress.textContent = '';
+  if (added || replaced) ctx.toast(t('lib.uploadedReplaced', { added, replaced }));
   await loadLibrary();
 }
 

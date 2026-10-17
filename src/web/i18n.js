@@ -5,6 +5,9 @@
 export const LANGUAGES = { en: 'English', sv: 'Svenska' };
 
 const en = {
+  'lib.replace': 'Replace icons with the same name (for example when importing a set again)',
+  'lib.uploading': 'Uploading… {done} of {total}',
+  'lib.uploadedReplaced': '{added} added, {replaced} replaced.',
   pickIcon: 'Choose icon',
   iconHelp: 'The icon is embedded in the Note, so Proxmox shows it without a web server. Uploaded images are added to the icon library.',
   'set.importSelect': 'Read select.json from the old Notes Generator',
@@ -136,6 +139,9 @@ const en = {
 };
 
 const sv = {
+  'lib.replace': 'Ersätt ikoner med samma namn (till exempel när ett set importeras igen)',
+  'lib.uploading': 'Laddar upp… {done} av {total}',
+  'lib.uploadedReplaced': '{added} tillagda, {replaced} ersatta.',
   pickIcon: 'Välj ikon',
   iconHelp: 'Ikonen bäddas in i noten, så Proxmox visar den utan webbserver. Uppladdade bilder läggs i ikonbiblioteket.',
   'set.importSelect': 'Läs select.json från gamla Notes Generator',
