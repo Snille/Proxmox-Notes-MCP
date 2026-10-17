@@ -1,0 +1,13 @@
+# Local development build: docker compose -f compose.dev.yaml up -d --build
+services:
+  proxmox-notes:
+    build: .
+    image: proxmox-notes:dev
+    container_name: proxmox-notes-dev
+    ports:
+      - "8085:8080"
+    volumes:
+      - proxmox-notes-dev-data:/data
+
+volumes:
+  proxmox-notes-dev-data:

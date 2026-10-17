@@ -1,0 +1,18 @@
+# Run a published image, for example as a Portainer stack.
+services:
+  proxmox-notes:
+    image: ghcr.io/snille/proxmox-notes-mcp:latest
+    container_name: proxmox-notes
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # Host names the service answers to; recommended behind a reverse proxy.
+      ALLOWED_HOSTS: ""
+      # Set when the reverse proxy lets /mcp through without its own login.
+      MCP_TOKEN: ""
+    volumes:
+      - proxmox-notes-data:/data
+
+volumes:
+  proxmox-notes-data:

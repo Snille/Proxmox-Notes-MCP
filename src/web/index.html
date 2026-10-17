@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Proxmox Notes</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>Proxmox Notes</h1>
+    <span id="status">…</span>
+  </header>
+  <main>
+    <p>The full editor is not built yet. This page checks that the service runs: paste a Note's Markdown and read it into the document model.</p>
+    <label for="markdown">Notes Markdown</label>
+    <textarea id="markdown" rows="14" spellcheck="false"></textarea>
+    <button id="parse" type="button">Parse</button>
+    <p id="summary" role="status"></p>
+    <pre id="result"></pre>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

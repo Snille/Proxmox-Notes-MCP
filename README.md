@@ -2,7 +2,7 @@
 
 A self-hosted service that creates, reads and edits the Notes (description) of Proxmox LXC containers and VMs. It has a web GUI, a REST API and an MCP server, and it replaces the browser-only [Proxmox Notes Generator](https://github.com/Snille/Proxmox-Notes).
 
-Status: **0.1.0, early development.** The Notes format (render and parse) is done and tested. The server, the Proxmox connection, the web GUI and the icon tools are not built yet.
+Status: **0.2.0, early development.** The Notes format and the server (REST, MCP, Docker) work. The Proxmox connection, the real web GUI and the icon tools are not built yet; the web page is only a test page for now.
 
 ## What it will do
 
@@ -18,11 +18,12 @@ Status: **0.1.0, early development.** The Notes format (render and parse) is don
 | Decision | Choice | Why |
 |----------|--------|-----|
 | Where it runs | Its own Docker container, one independent instance per site | Anyone can run their own copy (home, work, other people). No dependency on another service. |
-| Publishing | Public GitHub repository later | Others can use it. Nothing site-specific may be in the code; it goes in configuration. |
+| Publishing | Public GitHub repository | Others can use it. Nothing site-specific may be in the code or the repository; it goes in configuration. |
 | Icons | Embedded as WebP (`data:` URI) by default, URL as an option | Proxmox shows embedded raster images (tested 2026-10-17). SVG cannot be embedded. See [docs/NOTES_FORMAT.md](docs/NOTES_FORMAT.md). |
 | Language | Node.js 22+, plain ES modules, Vitest | Same stack as the original generator logic, so it ports directly. |
 | Data model | One JSON document per Note | The web GUI, REST, MCP and JSON export all use the same model; Markdown is rendered from it. |
 | Writes | Preview first; the old Note is saved as a snapshot before every write | A write overwrites the old text in Proxmox. The snapshot makes it reversible. |
+| Login | None in the service; put it behind a reverse proxy with authentication (for example Authelia) | One less thing to build and maintain; the proxy already does it well. |
 
 ## Proxmox permissions
 
@@ -34,6 +35,55 @@ Each Proxmox host gets its own API token, stored in this service's configuration
 | `VM.Config.Options` | Write the Notes (`description`) |
 
 A read-only instance needs only `VM.Audit`. The exact role, and what the OS prefill needs (the QEMU guest agent for VMs; LXC has no exec API), will be verified when the Proxmox connection is built.
+
+## Run it
+
+With Docker Compose or as a Portainer stack, using [compose.yaml](compose.yaml):
+
+```bash
+docker compose up -d
+```
+
+Then open `http://<host>:8080/`. The container keeps its data (options, later snapshots and icons) in the volume mounted at `/data`.
+
+The published image is not set up yet (step 7). Until then, build it locally with [compose.dev.yaml](compose.dev.yaml), which serves on port 8085:
+
+```bash
+docker compose -f compose.dev.yaml up -d --build
+```
+
+The host it runs on must reach the Proxmox API (port 8006) of every Proxmox host it manages.
+
+### Settings
+
+All settings are environment variables:
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `PORT` | `8080` | Port inside the container |
+| `DATA_DIR` | `/data` in the image | Where options, snapshots and icons are kept |
+| `ALLOWED_HOSTS` | empty (any) | Comma-separated host names the service answers to, for example `notes.example.com`. Recommended behind a reverse proxy. |
+| `MCP_TOKEN` | empty (none) | When set, `/mcp` needs `Authorization: Bearer <token>`. Use it when the proxy lets `/mcp` through without its own login, because MCP clients cannot do a browser login. |
+
+The service has no login of its own. Never expose it without a reverse proxy that has authentication. Requests from a web page on another site are refused (`Origin` check), so a logged-in browser cannot be used against it by another page.
+
+### Options
+
+The choices in the forms (heading icons, icon-set images, OS names and the template for a new Note) are kept in `/data/options.json`. On the first start, a `select.json` from the old Notes Generator in `/data` is converted automatically. Read and save them with `GET` and `PUT /api/options`.
+
+### Interfaces
+
+| Path | What |
+|------|------|
+| `/` | Web GUI (a test page for now) |
+| `/api/tools/{name}` | REST: `POST` a tool's arguments as JSON |
+| `/api/options` | `GET` or `PUT` the options |
+| `/mcp` | MCP over Streamable HTTP |
+| `/health/live` | Health check |
+
+MCP over stdio, for an assistant on the same machine: `node src/stdio.mjs`.
+
+Tools: `notes_status`, `notes_options`, `notes_new`, `notes_render`, `notes_parse`, `notes_import_legacy`. None of them write to Proxmox yet.
 
 ## Development
 
@@ -49,6 +99,9 @@ npm run check
 | Path | Content |
 |------|---------|
 | `src/format/` | The Notes document model: `render.mjs`, `parse.mjs`, `defaults.mjs`, `legacy.mjs` (old generator JSON) |
+| `src/server.mjs`, `src/mcp.mjs`, `src/tools.mjs` | HTTP server, MCP server and the tools both use |
+| `src/options.mjs`, `src/config.mjs` | Instance options (`/data/options.json`) and environment settings |
+| `src/web/` | The web page |
 | `test/` | Vitest tests |
 | `reference/examples/` | Eleven real Notes with addresses and names replaced, used as golden test files |
 | `reference/select.json` | The old generator's options file (icons, image keys, OS names) |
@@ -59,13 +112,13 @@ npm run check
 ## Plan
 
 1. ✅ Notes format: document model, render, parse, round-trip tests.
-2. Server: Docker image, configuration, REST API, MCP (HTTP and stdio), login for the web GUI.
+2. ✅ Server: Docker image, configuration, REST API, MCP (HTTP and stdio).
 3. Proxmox: list guests on several hosts, read Notes, write with preview and snapshot.
 4. Web GUI: guest list, editor with live preview, save to Proxmox, JSON export and import, options editor (replaces `select.json`).
 5. Icons: icon library, embed from file or URL, dashboard-icons.
 6. Icon generation: ComfyUI first, then the cloud services one at a time.
-7. Release: licence, public README, container image.
+7. Release: licence, container image built by GitHub Actions, ready-made Portainer stack.
 
-Open questions: the project and repository name (this could become the next major version of `Snille/Proxmox-Notes`), and how the web GUI login works (local users, or behind a reverse proxy).
+Open questions: the project name (this could become the next major version of `Snille/Proxmox-Notes`), and where the image is published (GitHub Container Registry or Docker Hub).
 
 History: [HISTORY.md](HISTORY.md).

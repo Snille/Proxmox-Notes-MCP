@@ -1,0 +1,128 @@
+import * as z from 'zod';
+import { fromLegacyJson, parseNotes, PROXMOX_DESCRIPTION_LIMIT, renderNotes, SCHEMA } from './format/index.mjs';
+import { iconSetUrl, newDocument } from './options.mjs';
+import { version } from './version.mjs';
+
+const rowSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('field'), key: z.string(), value: z.string() }),
+  z.object({ type: z.literal('link'), name: z.string(), url: z.string() }),
+  z.object({ type: z.literal('text'), text: z.string() })
+]);
+
+const imageSchema = z.object({
+  src: z.string().min(1).describe('An https:// URL or an embedded data:image/...;base64, image'),
+  width: z.number().int().positive().optional(),
+  height: z.number().int().positive().optional(),
+  key: z.string().optional().describe('Icon-set key, for example "sonarr01-"'),
+  title: z.string().optional(),
+  alt: z.string().optional()
+});
+
+export const documentSchema = z.object({
+  schema: z.literal(SCHEMA).default(SCHEMA),
+  headerIcon: z.string().describe('Font Awesome 4 class for the heading, for example "fa-linux"'),
+  title: z.string(),
+  image: imageSchema.nullable().default(null),
+  description: z.string().default('').describe('Short description; real newlines'),
+  notes: z.string().default('').describe('Free text; real newlines; simple HTML such as <b> is allowed'),
+  sections: z.array(z.object({
+    id: z.string(),
+    title: z.string(),
+    icon: z.string().describe('Font Awesome classes, for example "fa-sitemap fa-fw"'),
+    rows: z.array(rowSchema)
+  }))
+});
+
+function rendered(doc) {
+  const markdown = renderNotes(doc);
+  return {
+    markdown,
+    length: markdown.length,
+    limit: PROXMOX_DESCRIPTION_LIMIT,
+    fits: markdown.length <= PROXMOX_DESCRIPTION_LIMIT
+  };
+}
+
+export function buildTools({ options }) {
+  return [
+    {
+      name: 'notes_status',
+      title: 'Service status',
+      description: 'Show the service version and where its options come from.',
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({}).strict(),
+      handler: async () => ({
+        service: 'proxmox-notes',
+        version,
+        optionsSource: options.source,
+        transports: { mcp: '/mcp', rest: '/api/tools/{name}' }
+      })
+    },
+    {
+      name: 'notes_options',
+      title: 'Form options',
+      description: 'Return the choices for a Note: heading icons, icon-set images, OS names and the template for a new Note.',
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({}).strict(),
+      handler: async () => options.get()
+    },
+    {
+      name: 'notes_new',
+      title: 'New Note',
+      description: 'Create a new Note document from the instance template. Optionally pick an icon-set image by key. Nothing is written to Proxmox.',
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({
+        title: z.string().default(''),
+        headerIcon: z.string().optional(),
+        imageKey: z.string().optional().describe('Icon-set key from notes_options images, for example "sonarr01-"')
+      }).strict(),
+      handler: async ({ title, headerIcon, imageKey }) => {
+        const current = options.get();
+        const src = iconSetUrl(current.iconSet, imageKey);
+        if (imageKey && !src) {
+          throw new Error('No icon set is configured, so an image key cannot be used');
+        }
+        const image = src ? { src, width: current.iconSet.width, height: current.iconSet.height, key: imageKey } : null;
+        return { doc: newDocument(current, { title, headerIcon, image }) };
+      }
+    },
+    {
+      name: 'notes_render',
+      title: 'Render a Note',
+      description: 'Turn a Note document into the Markdown Proxmox shows, and check it against the 8192-character limit. Nothing is written to Proxmox.',
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({ doc: documentSchema }).strict(),
+      handler: async ({ doc }) => rendered(doc)
+    },
+    {
+      name: 'notes_parse',
+      title: 'Parse a Note',
+      description: 'Read Notes Markdown into a Note document. Returns ok=false with the line number when the text does not follow the format; the text is then best edited as raw text.',
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({ markdown: z.string() }).strict(),
+      handler: async ({ markdown }) => parseNotes(markdown)
+    },
+    {
+      name: 'notes_import_legacy',
+      title: 'Import a Notes Generator file',
+      description: 'Convert a JSON file saved by the original Proxmox Notes Generator into a Note document.',
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({ saved: z.record(z.string(), z.unknown()) }).strict(),
+      handler: async ({ saved }) => {
+        const { iconSet } = options.get();
+        const doc = fromLegacyJson(saved, { imageFqdn: iconSet.baseUrl, imageWidth: iconSet.width, imageHeight: iconSet.height });
+        return { doc, ...rendered(doc) };
+      }
+    }
+  ];
+}
+
+export async function executeTool(tool, rawArgs) {
+  const parsed = tool.inputSchema.safeParse(rawArgs ?? {});
+  if (!parsed.success) {
+    const error = new Error(`Invalid arguments: ${z.prettifyError(parsed.error)}`);
+    error.statusCode = 400;
+    throw error;
+  }
+  return tool.handler(parsed.data);
+}
