@@ -482,7 +482,9 @@ async function embedLibraryIcon(icon) {
 }
 
 async function pickIcon() {
-  const icon = await openIconDialog({ el, toast, size: iconSize(), images: state.options?.images, mode: 'pick' });
+  const icon = await openIconDialog({
+    el, toast, size: iconSize(), images: state.options?.images, mode: 'pick', generator: state.options?.generator, name: state.doc?.title ?? ''
+  });
   if (!icon) return;
   try {
     await embedLibraryIcon(icon);

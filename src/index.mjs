@@ -2,6 +2,7 @@ import { loadSettings } from './config.mjs';
 import { OptionsStore } from './options.mjs';
 import { Proxmox } from './proxmox/index.mjs';
 import { IconStore } from './icons.mjs';
+import { Generator } from './comfyui.mjs';
 import { SnapshotStore } from './snapshots.mjs';
 import { createNotesServer } from './server.mjs';
 import { buildTools } from './tools.mjs';
@@ -13,7 +14,8 @@ const proxmox = await Proxmox.open(settings.targetsFile);
 const snapshots = new SnapshotStore(settings.dataDir);
 const icons = await IconStore.open(settings.dataDir);
 const tools = buildTools({ options, proxmox, snapshots, icons });
-const server = createNotesServer({ settings, options, tools, proxmox, icons });
+const generator = new Generator({ options });
+const server = createNotesServer({ settings, options, tools, proxmox, icons, generator });
 
 server.listen(settings.port, settings.host, () => {
   console.log(JSON.stringify({

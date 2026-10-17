@@ -8,7 +8,7 @@ import { join } from 'node:path';
 
 const ID = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const MAX_ICON_BYTES = 200_000;
-const MAX_ORIGINAL_BYTES = 4_000_000;
+const MAX_ORIGINAL_BYTES = 8_000_000;
 
 const SIGNATURES = [
   { type: 'image/png', ext: 'png', test: b => b.length > 8 && b.readUInt32BE(0) === 0x89504e47 },
@@ -76,7 +76,7 @@ export class IconStore {
 
   // With replace, an icon whose id the name gives already exists is replaced in place (same id and
   // name, new image), so importing a set again updates it instead of making copies.
-  async add({ label, webp, original, width, height, source, replace = false }) {
+  async add({ label, webp, original, width, height, source, generation, replace = false }) {
     const name = String(label ?? '').trim();
     if (!name || name.length > 80) throw badRequest('An icon needs a name of 1 to 80 characters');
     const icon = Buffer.from(String(webp ?? ''), 'base64');
@@ -110,6 +110,14 @@ export class IconStore {
       source: String(source ?? 'upload').slice(0, 200),
       addedAt: new Date().toISOString()
     };
+    if (generation && typeof generation === 'object') {
+      entry.generation = {
+        subject: String(generation.subject ?? '').slice(0, 1000),
+        style: String(generation.style ?? '').slice(0, 40),
+        prompt: String(generation.prompt ?? '').slice(0, 4000),
+        seed: Number.isSafeInteger(generation.seed) ? generation.seed : null
+      };
+    }
     if (originalFile) {
       entry.original = { file: `${id}.orig.${originalFile.ext}`, type: originalFile.type, bytes: originalBuffer.length };
       await writeFile(join(this.dir, entry.original.file), originalBuffer);

@@ -3,7 +3,7 @@
 // library and dashboard-icons, and the Font Awesome 4 icon list for heading icons.
 import { t } from './i18n.js';
 
-const MAX_ORIGINAL_BYTES = 4_000_000;
+const MAX_ORIGINAL_BYTES = 8_000_000;
 
 async function request(method, path, body) {
   const response = await fetch(path, {
@@ -55,17 +55,55 @@ async function drawWebp(blob, width, height) {
   return webp;
 }
 
-export async function addIcon({ label, blob, source, size, replace = false }) {
+// The icon is drawn from blob; the original kept with it is `original` when given (for example
+// the untrimmed generated image), otherwise blob itself.
+export async function addIcon({ label, blob, original = blob, source, size, generation, replace = false }) {
   const webp = await drawWebp(blob, size.width, size.height);
   return (await request('POST', '/api/icons', {
     label,
     webp: await base64(webp),
-    original: blob.size <= MAX_ORIGINAL_BYTES ? await base64(blob) : undefined,
+    original: original.size <= MAX_ORIGINAL_BYTES ? await base64(original) : undefined,
     width: size.width,
     height: size.height,
     source,
+    generation,
     replace
   })).icon;
+}
+
+// Crops the transparent border off an image (a generated icon after background removal), keeping
+// a small margin, so the icon fills its box like the hand-made ones. Returns a PNG blob.
+export async function trimTransparent(blob, margin = 0.02) {
+  const bitmap = await createImageBitmap(blob);
+  const canvas = document.createElement('canvas');
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  context.drawImage(bitmap, 0, 0);
+  bitmap.close();
+  const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
+  let top = height, left = width, right = -1, bottom = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * 4 + 3] > 16) {
+        if (x < left) left = x;
+        if (x > right) right = x;
+        if (y < top) top = y;
+        bottom = y;
+      }
+    }
+  }
+  if (right < 0) return blob;
+  const pad = Math.round(Math.max(right - left, bottom - top) * margin);
+  left = Math.max(0, left - pad);
+  top = Math.max(0, top - pad);
+  right = Math.min(width - 1, right + pad);
+  bottom = Math.min(height - 1, bottom + pad);
+  const crop = document.createElement('canvas');
+  crop.width = right - left + 1;
+  crop.height = bottom - top + 1;
+  crop.getContext('2d').drawImage(canvas, left, top, crop.width, crop.height, 0, 0, crop.width, crop.height);
+  return new Promise(resolve => crop.toBlob(resolve, 'image/png'));
 }
 
 // "sonarr01-512x512.png" -> key "sonarr01". A size suffix is dropped, also a mistyped one such as
@@ -128,7 +166,7 @@ let picker = null;
  * dialog open so several dashboard-icons can be added to the library. Returns a promise of the
  * chosen icon, or null when the dialog is closed.
  */
-export function openIconDialog({ el, toast, size, images = [], mode = 'pick', tab = 'library' }) {
+export function openIconDialog({ el, toast, size, images = [], mode = 'pick', tab = 'library', generator = null, name = '' }) {
   const dialog = document.getElementById('iconDialog');
   const state = { icons: [], resolve: null };
   picker = state;
@@ -185,10 +223,90 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
     }, 250);
   };
 
+  // ---------- create with AI ----------
+
+  const styles = generator?.styles ?? [];
+  const currentStyle = () => styles.find(style => style.name === $('genStyle').value) ?? styles[0];
+  const showPrompt = () => {
+    const subject = $('genSubject').value.trim().replace(/[.\s]+$/, '');
+    $('genPrompt').textContent = currentStyle() && subject ? currentStyle().prompt.replaceAll('{{subject}}', subject) : '';
+  };
+
+  const keepGenerated = async (job, label, src) => {
+    try {
+      const original = await (await fetch(src)).blob();
+      const icon = await addIcon({
+        label: `${label}${job.labelSuffix}`,
+        blob: await trimTransparent(original),
+        original,
+        source: `comfyui:${job.style}`,
+        size,
+        generation: { subject: job.subject, style: job.style, prompt: job.prompt, seed: job.seed }
+      });
+      state.icons.push(icon);
+      toast(t('lib.added', { name: icon.label }));
+      choose(icon);
+    } catch (error) {
+      toast(error.message, 'bad');
+    }
+  };
+
+  const generate = async () => {
+    const label = $('genName').value.trim();
+    const subject = $('genSubject').value.trim();
+    if (!label || !subject) {
+      toast(t('gen.needBoth'), 'bad');
+      return;
+    }
+    const button = $('btnGenerate');
+    const status = $('genStatus');
+    button.disabled = true;
+    $('genGrid').replaceChildren();
+    try {
+      let { job } = await request('POST', '/api/generate', {
+        subject, style: $('genStyle').value, count: Number($('genCount').value), host: $('genHost').value || undefined
+      });
+      state.job = job.id;
+      while (job.state === 'queued' || job.state === 'running') {
+        status.textContent = t(`gen.${job.state}`, { seconds: Math.round(job.elapsedMs / 1000), host: job.host });
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        if (picker !== state || state.job !== job.id) return;
+        job = (await request('GET', `/api/generate/${job.id}`)).job;
+      }
+      if (job.state === 'error') throw new Error(job.error);
+      status.textContent = t('gen.done', { seconds: Math.round(job.elapsedMs / 1000), host: job.host });
+      renderGrid($('genGrid'), job.images.map((src, index) => ({ id: `${job.id}-${index}`, label: `${label} ${index + 1}`, src })), {
+        el,
+        onPick: item => keepGenerated(job, label, item.src)
+      });
+    } catch (error) {
+      status.textContent = '';
+      toast(error.message, 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  };
+
+  const fillGenerator = () => {
+    const ready = Boolean(generator?.hosts?.length && styles.length);
+    $('genReady').hidden = !ready;
+    $('genNotReady').hidden = ready;
+    if (!ready) return;
+    $('genStyle').replaceChildren(...styles.map(style => el('option', { value: style.name, text: style.name })));
+    $('genCount').value = String(generator.count);
+    $('genHost').replaceChildren(el('option', { value: '', text: t('gen.autoHost') }), ...generator.hosts.map(url => el('option', { value: url, text: url })));
+    $('genName').value = name;
+    $('genSubject').value = '';
+    $('genStatus').textContent = '';
+    $('genGrid').replaceChildren();
+    showPrompt();
+  };
+
   const setTab = name => {
     for (const button of dialog.querySelectorAll('[data-icon-tab]')) button.classList.toggle('active', button.dataset.iconTab === name);
     $('iconTabLibrary').hidden = name !== 'library';
     $('iconTabDashboard').hidden = name !== 'dashboard';
+    $('iconTabGenerate').hidden = name !== 'generate';
     if (name === 'dashboard' && !$('dashboardGrid').childElementCount) searchDashboard();
     if (name === 'library') showLibrary();
   };
@@ -206,8 +324,12 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
       await picker?.uploadFiles(files);
     });
     dialog.addEventListener('close', () => { picker?.resolve?.(null); if (picker) picker.resolve = null; });
+    $('btnGenerate').addEventListener('click', () => picker?.generate());
+    for (const id of ['genSubject', 'genStyle']) $(id).addEventListener('input', () => picker?.showPrompt());
   }
 
+  state.generate = generate;
+  state.showPrompt = showPrompt;
   state.showLibrary = showLibrary;
   state.searchDashboard = searchDashboard;
   state.setTab = setTab;
@@ -228,6 +350,7 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
   $('iconDialogTitle').textContent = mode === 'pick' ? t('lib.pickTitle') : t('lib.addTitle');
   $('iconDialogSearch').value = '';
   $('dashboardGrid').replaceChildren();
+  fillGenerator();
   dialog.showModal();
   loadLibrary().then(() => setTab(tab));
   return new Promise(resolve => { state.resolve = resolve; });

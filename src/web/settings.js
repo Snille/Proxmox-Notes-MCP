@@ -53,13 +53,21 @@ export function initSettings(context) {
     await uploadFiles([...event.dataTransfer.files].filter(file => file.type.startsWith('image/')));
   });
   $('btnDashboardIcons').addEventListener('click', async () => {
-    await openIconDialog({ el: ctx.el, toast: ctx.toast, size: iconSize(), images: draft.images, mode: 'add', tab: 'dashboard' });
+    await openIconDialog({ el: ctx.el, toast: ctx.toast, size: iconSize(), images: draft.images, mode: 'add', tab: 'dashboard', generator: ctx.getOptions().generator });
+    await loadLibrary();
+  });
+  $('btnGenerateIcons').addEventListener('click', async () => {
+    await openIconDialog({ el: ctx.el, toast: ctx.toast, size: iconSize(), images: draft.images, mode: 'add', tab: 'generate', generator: ctx.getOptions().generator });
     await loadLibrary();
   });
   $('btnImportSet').addEventListener('click', importIconSet);
   $('btnAddHeaderIcon').addEventListener('click', openFaDialog);
   $('faSearch').addEventListener('input', renderFaGrid);
   $('faClose').addEventListener('click', () => $('faDialog').close());
+  $('btnTestGenerator').addEventListener('click', testGenerator);
+  $('btnAddStyle').addEventListener('click', addStyle);
+  $('genWorkflowFile').addEventListener('change', loadWorkflowFile);
+  for (const radio of document.querySelectorAll('input[name="genMode"]')) radio.addEventListener('change', showGeneratorMode);
   $('myTheme').addEventListener('change', e => { ctx.setPreference('theme', e.target.value); });
   $('myLanguage').addEventListener('change', e => { ctx.setPreference('language', e.target.value); });
 }
@@ -90,6 +98,7 @@ export function refreshSettings() {
   renderTemplate();
   renderHeaderIcons();
   renderLibrary();
+  renderStyles();
   loadHosts();
 }
 
@@ -253,6 +262,105 @@ function fillOptionForms() {
   renderHeaderIcons();
   renderTemplate();
   fillAppearance();
+  fillGenerator();
+}
+
+// ---------- image generator ----------
+
+const RECIPE_FIELDS = {
+  unet: 'genUnet', clip: 'genClip', lora: 'genLora', vae: 'genVae', loraStrength: 'genLoraStrength', steps: 'genSteps',
+  cfg: 'genCfg', sampler: 'genSampler', scheduler: 'genScheduler', shift: 'genShift', width: 'genWidth', height: 'genHeight',
+  removeBackground: 'genBackground'
+};
+
+function fillGenerator() {
+  const generator = draft.generator;
+  $('genHosts').value = generator.hosts.join('\n');
+  for (const radio of document.querySelectorAll('input[name="genMode"]')) radio.checked = radio.value === generator.mode;
+  for (const [key, id] of Object.entries(RECIPE_FIELDS)) $(id).value = generator.recipe[key];
+  $('genWorkflow').value = generator.workflow;
+  $('genDefaultCount').value = generator.count;
+  $('genTimeout').value = generator.timeoutSeconds;
+  $('genTestResult').replaceChildren();
+  showGeneratorMode();
+  renderStyles();
+}
+
+function showGeneratorMode() {
+  const own = document.querySelector('input[name="genMode"]:checked')?.value === 'workflow';
+  $('genRecipe').hidden = own;
+  $('genOwn').hidden = !own;
+}
+
+function collectGenerator() {
+  const recipe = {};
+  for (const [key, id] of Object.entries(RECIPE_FIELDS)) {
+    const input = $(id);
+    recipe[key] = input.type === 'number' ? Number(input.value) : input.value.trim();
+  }
+  return {
+    hosts: $('genHosts').value.split('\n').map(line => line.trim().replace(/\/+$/, '')).filter(Boolean),
+    mode: document.querySelector('input[name="genMode"]:checked')?.value ?? 'recipe',
+    count: Number($('genDefaultCount').value),
+    timeoutSeconds: Number($('genTimeout').value),
+    recipe,
+    workflow: $('genWorkflow').value.trim(),
+    styles: draft.generator.styles
+  };
+}
+
+function renderStyles() {
+  const box = $('genStyles');
+  box.replaceChildren(...draft.generator.styles.map((style, index) => {
+    const update = key => event => { style[key] = event.target.value; };
+    return ctx.el('div', { class: 'style-item' }, [
+      ctx.el('div', { class: 'grid-2' }, [
+        ctx.el('label', { class: 'label' }, [ctx.el('span', { text: t('gen.styleName') }), ctx.el('input', { type: 'text', value: style.name, oninput: update('name') })]),
+        ctx.el('label', { class: 'label' }, [ctx.el('span', { text: t('gen.labelSuffix') }), ctx.el('input', { type: 'text', value: style.labelSuffix, placeholder: ' (green)', oninput: update('labelSuffix') })])
+      ]),
+      ctx.el('label', { class: 'label' }, [ctx.el('span', { text: t('gen.stylePrompt') }), ctx.el('textarea', { rows: 3, text: style.prompt, oninput: update('prompt') })]),
+      ctx.el('div', { class: 'row-buttons' }, [
+        ctx.el('button', { type: 'button', class: 'small danger', onclick: () => { draft.generator.styles.splice(index, 1); renderStyles(); } }, [
+          ctx.el('i', { class: 'fa fa-trash' }), ctx.el('span', { text: ` ${t('remove')}` })
+        ])
+      ])
+    ]);
+  }));
+}
+
+function addStyle() {
+  draft.generator.styles.push({ name: t('gen.newStyle'), prompt: 'A high quality icon of a {{subject}}, on a plain white background.', labelSuffix: '' });
+  renderStyles();
+}
+
+async function testGenerator() {
+  const list = $('genTestResult');
+  list.replaceChildren(ctx.el('li', { class: 'muted small', text: t('loading') }));
+  try {
+    const { results } = await request('POST', '/api/generator/test', collectGenerator());
+    if (!results.length) {
+      list.replaceChildren(ctx.el('li', { class: 'bad small', text: t('gen.noHosts') }));
+      return;
+    }
+    list.replaceChildren(...results.map(result => {
+      const lines = [ctx.el('strong', { class: result.ok ? 'test-ok' : 'test-bad', text: `${result.ok ? '✓' : '✗'} ${result.url}` })];
+      if (result.device) lines.push(ctx.el('div', { class: 'small', text: `ComfyUI ${result.version ?? ''} · ${result.device}` }));
+      for (const [key, name] of Object.entries(result.models ?? {})) {
+        if (name) lines.push(ctx.el('div', { class: 'small muted', text: `${key}: ${name}` }));
+      }
+      if (result.missing?.length) lines.push(ctx.el('div', { class: 'small bad', text: t('gen.missing', { names: result.missing.join(', ') }) }));
+      if (result.error) lines.push(ctx.el('div', { class: 'small bad', text: result.error }));
+      return ctx.el('li', {}, lines);
+    }));
+  } catch (error) {
+    list.replaceChildren(ctx.el('li', { class: 'bad small', text: error.message }));
+  }
+}
+
+async function loadWorkflowFile(event) {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (file) $('genWorkflow').value = await file.text();
 }
 
 // ---------- heading icons ----------
@@ -467,7 +575,8 @@ function collectOptions() {
     images: textToPairs($('optImages').value, 'label', 'key'),
     headerIcons: draft.headerIcons,
     template: { ...draft.template, headerIcon: $('optHeaderIcon').value },
-    appearance: { theme: $('optTheme').value, language: $('optLanguage').value }
+    appearance: { theme: $('optTheme').value, language: $('optLanguage').value },
+    generator: collectGenerator()
   };
 }
 

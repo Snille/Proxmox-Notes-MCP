@@ -2,7 +2,7 @@
 
 A self-hosted service that creates, reads and edits the Notes (description) of Proxmox LXC containers and VMs. It has a web GUI, a REST API and an MCP server, and it replaces the browser-only [Proxmox Notes Generator](https://github.com/Snille/Proxmox-Notes).
 
-Status: **0.9.0, first release.** The Notes format, the server (REST, MCP, Docker), reading and writing Notes in Proxmox, the web GUI with its settings page (English and Swedish) and the icon library work, and a ready-made image is published. Icon generation with AI is not built yet.
+Status: **0.10.0.** The Notes format, the server (REST, MCP, Docker), reading and writing Notes in Proxmox, the web GUI with its settings page (English and Swedish) and the icon library and icon generation with ComfyUI work, and a ready-made image is published. The cloud image services are not built yet.
 
 ## What it will do
 
@@ -83,14 +83,25 @@ The guests' facts come from their config: hostname, IP (static, or the DHCP addr
 - **Layout**: full-width table (default) or the old Markdown layout. A Note stored in the other layout is converted when it is saved, and the editor says so.
 - **Icons**: **Choose icon** opens the icon library as a searchable grid, with a second tab for dashboard-icons. An uploaded image is added to the library first. The icon is always embedded; if the Note has too little room left, it is encoded again at a lower quality.
 - **Icon library** (Settings → Icons): a grid of every icon with search, rename and remove; upload several files or drop them on the page; add icons from [dashboard-icons](https://github.com/homarr-labs/dashboard-icons) by searching for them; import a whole web icon set once (for example the old Notes Generator's, from its `select.json`), after which that web server is no longer needed. An uploaded file is named from its file name without the size (`sonarr01-512x512.png` becomes "Sonarr 01", taking the name from the icon-set list when the key is in it), and with **Replace icons with the same name** an upload updates an icon instead of adding a copy, so a whole folder can be uploaded again, for example in a larger size. Heading icons are chips, added from a searchable list of all 786 Font Awesome 4 icons.
+- **Create with AI** (a tab in **Choose icon**, and a button in Settings → Icons): give a name and what the icon shows, pick a style, and ComfyUI draws up to four images. Clicking one trims its transparent border, adds it to the library and keeps the prompt, style and seed with it.
 - **From Proxmox**: one button updates IP, MAC, DHCP and OS from the guest's config. When the IP changes, service links that pointed at the old IP move along. An exact OS release in the Note ("Debian 13") is kept when Proxmox only knows the family ("Debian").
 - **Import and export**: export a Note as JSON; import JSON from this tool or from the old Notes Generator, or Markdown. **Copy Markdown** puts the text on the clipboard for the Proxmox Notes field.
 - **Save to Proxmox**: a dialog shows the Notes now in Proxmox and the Notes that will be written, side by side, before anything is written. **History** lists the snapshots kept before each save.
-- **Settings**: Proxmox hosts (add, edit, remove, read and pin the certificate, test the connection); Notes defaults (layout, heading icon, the template for a new Note with default values such as the owner, OS names); icons (icon-set address and size, image list, heading icons, import of the old `select.json`); appearance (theme and language for this browser, and the defaults for every browser).
+- **Settings**: Proxmox hosts (add, edit, remove, read and pin the certificate, test the connection); Notes defaults (layout, heading icon, the template for a new Note with default values such as the owner, OS names); icons (icon-set address and size, image list, heading icons, import of the old `select.json`); image generator (ComfyUI hosts with a connection test, the recipe or an own workflow, styles); appearance (theme and language for this browser, and the defaults for every browser).
 - **Languages**: English and Swedish. A missing Swedish text falls back to English; a test checks that both languages have every text the page uses.
 - **Themes**: dark (default), light, or follow the system.
 
 The browser loads the Notes format modules from `/format/`, so the preview matches what the server renders. Font Awesome 4.7 is bundled (font: SIL OFL 1.1, CSS: MIT; see `src/web/vendor/font-awesome/LICENSE.txt`), because Proxmox uses that version for the icons in Notes.
+
+## Icon generation
+
+The server sends the work to ComfyUI over its HTTP API and fetches the images, so only the server has to reach ComfyUI, not the browser. Add the addresses under **Settings → Image generator**; they are tried in order, and the first that answers is used (or pick one in the dialog). **Test connection** shows the GPU and which models were found.
+
+- **Built-in recipe**: Qwen-Image with an optional speed LoRA, then background removal with the RMBG node from [ComfyUI-RMBG](https://github.com/1038lab/ComfyUI-RMBG). The defaults are Qwen-Image 2512 (fp8), the Wuli Turbo LoRA (4 steps), the Qwen 2.5 VL text encoder, the Qwen-Image VAE and RMBG-2.0, at 1328 × 1328. A model name may leave out its folder; the server finds it in the host's lists. The results go to ComfyUI's temp folder, not its output folder.
+- **Own workflow**: export it from ComfyUI with *Export (API)* and paste it. `{{prompt}}` is replaced with the prompt; `{{seed}}`, `{{width}}`, `{{height}}` and `{{count}}` become numbers. Every image the workflow outputs is offered.
+- **Styles** are prompt templates with `{{subject}}`, plus an ending for the icon's name. Two are included: blue and green metal frames (" (green)").
+
+Finished generations are kept in memory for 30 minutes. Generation is offered in the web GUI and REST, not over MCP, because the browser draws the icon.
 
 ## Run it
 
@@ -149,6 +160,8 @@ The host settings (`/api/settings/...`) are offered in the web GUI and REST only
 |------|------|
 | `/` | Web GUI |
 | `/api/icons` | The icon library: `GET` lists, `POST` adds (a WebP drawn by the browser plus the original, as base64), `PATCH`/`DELETE /api/icons/<id>` rename and remove, `GET /api/icons/<id>.webp` serves one |
+| `/api/generate` | `POST {subject, style, count, host}` starts a generation; `GET /api/generate/<id>` shows its state and image URLs; `GET /api/generate/<id>/<n>.png` serves an image |
+| `/api/generator/test` | `POST` the generator settings (also unsaved ones) to test each ComfyUI host |
 | `/api/dashboard-icons?q=<words>` | Searches the names in dashboard-icons; `GET /api/dashboard-icons/<name>.png` fetches one through the server |
 | `/api/icon?key=<key>` | An icon from the configured web icon set, for the import. Only URLs built from that icon set are fetched. |
 | `/api/tools/{name}` | REST: `POST` a tool's arguments as JSON |
@@ -185,6 +198,7 @@ The workflow checks that the tag matches `package.json`, runs the tests, builds 
 | `src/server.mjs`, `src/mcp.mjs`, `src/tools.mjs` | HTTP server, MCP server and the tools both use |
 | `src/options.mjs`, `src/config.mjs` | Instance options (`/data/options.json`) and environment settings |
 | `src/proxmox/` | Targets (`targets.json`), the API client with certificate pinning, and guest facts |
+| `src/comfyui.mjs` | Icon generation: the ComfyUI client, the built-in recipe, own workflows and the jobs |
 | `src/icons.mjs`, `src/dashboard-icons.mjs` | The icon library (`/data/icons`) and the dashboard-icons search |
 | `src/web/` | The web GUI: `app.js`, `settings.js`, `library.js` (icon library and picker), `preview.js` (Proxmox-like rendering and sanitizing), `icons.js` (embedding within the size limit), `i18n.js` (texts), bundled Font Awesome |
 | `test/` | Vitest tests |
@@ -201,10 +215,11 @@ The workflow checks that the tag matches `package.json`, runs the tests, builds 
 2. ✅ Server: Docker image, configuration, REST API, MCP (HTTP and stdio).
 3. ✅ Proxmox: list guests on several hosts, read Notes, prefill from facts, write with preview, digest check and snapshot.
 4. ✅ Web GUI: guest list, editor with live preview, icons, JSON export and import, save to Proxmox, history.
-5. ✅ Settings page in the web GUI: Proxmox hosts, Notes defaults and template, icons, theme and language. The image generator settings come with icon generation.
+5. ✅ Settings page in the web GUI: Proxmox hosts, Notes defaults and template, icons, theme and language. The image generator settings came with icon generation (step 8).
 6. ✅ Icons: icon library, upload, dashboard-icons, import of a web icon set, icon picker in the editor.
 7. ✅ Release: MIT licence, image on GitHub Container Registry built by GitHub Actions, ready-made Portainer stack.
-8. Icon generation: ComfyUI first, then the cloud services one at a time.
+8. ✅ Icon generation with ComfyUI: built-in recipe (Qwen-Image and RMBG) or an own workflow, styles, up to four images per run.
+9. Icon generation with cloud services (Nano Banana, OpenAI, Grok), one at a time.
 
 Open question: the project name (this could become the next major version of `Snille/Proxmox-Notes`).
 

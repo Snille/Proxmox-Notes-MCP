@@ -35,10 +35,47 @@ export const DEFAULT_OPTIONS = {
     ]
   },
   // Defaults for every viewer; each browser can override them on the settings page.
-  appearance: { theme: 'system', language: 'en' }
+  appearance: { theme: 'system', language: 'en' },
+  // Icon generation with ComfyUI (see comfyui.mjs). The recipe's model names may leave out the
+  // folder; the server finds them in the host's lists.
+  generator: {
+    hosts: [],
+    mode: 'recipe',
+    count: 4,
+    timeoutSeconds: 300,
+    recipe: {
+      unet: 'qwen_image_2512_fp8_e4m3fn.safetensors',
+      lora: 'Wuli-Qwen-Image-2512-Turbo-LoRA-4steps-V1.0-bf16_ComfyUi.safetensors',
+      loraStrength: 1,
+      clip: 'qwen_2.5_vl_7b_fp8_scaled.safetensors',
+      vae: 'qwen_image_vae.safetensors',
+      width: 1328,
+      height: 1328,
+      steps: 4,
+      cfg: 1,
+      sampler: 'euler',
+      scheduler: 'simple',
+      shift: 3,
+      removeBackground: 'RMBG-2.0'
+    },
+    workflow: '',
+    styles: [
+      {
+        name: 'Blue',
+        prompt: 'A high quality icon type picture viewed straight ahead from the front with a spotless plain blue metallic frame, inside the frame is a {{subject}}. Outside the frame is emptiness.',
+        labelSuffix: ''
+      },
+      {
+        name: 'Green',
+        prompt: 'A high quality icon type picture viewed straight ahead from the front with a spotless clean new green metallic frame, inside the frame is a {{subject}}. Outside the frame is emptiness.',
+        labelSuffix: ' (green)'
+      }
+    ]
+  }
 };
 
 const FA_CLASS = z.string().regex(/^fa-[a-z0-9-]+( fa-[a-z0-9-]+)*$/, 'Font Awesome classes such as "fa-linux" or "fa-key fa-fw"');
+const HTTP_URL = z.url().refine(v => /^https?:\/\//.test(v), 'http(s) only');
 const rowSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('field'), key: z.string(), value: z.string() }),
   z.object({ type: z.literal('link'), name: z.string(), url: z.string() }),
@@ -49,7 +86,7 @@ export const optionsSchema = z.object({
   headerIcons: z.array(z.object({ label: z.string().min(1), icon: FA_CLASS })),
   layout: z.enum(LAYOUTS),
   iconSet: z.object({
-    baseUrl: z.union([z.literal(''), z.url().refine(v => /^https?:\/\//.test(v), 'http(s) only')]),
+    baseUrl: z.union([z.literal(''), HTTP_URL]),
     width: z.number().int().min(16).max(512),
     height: z.number().int().min(16).max(512),
     extension: z.string().regex(/^\.[a-z0-9]+$/)
@@ -60,7 +97,34 @@ export const optionsSchema = z.object({
     headerIcon: FA_CLASS,
     sections: z.array(z.object({ id: z.string().min(1), title: z.string().min(1), icon: FA_CLASS, rows: z.array(rowSchema) }))
   }),
-  appearance: z.object({ theme: z.enum(['system', 'dark', 'light']), language: z.enum(['en', 'sv']) })
+  appearance: z.object({ theme: z.enum(['system', 'dark', 'light']), language: z.enum(['en', 'sv']) }),
+  generator: z.object({
+    hosts: z.array(HTTP_URL).max(10),
+    mode: z.enum(['recipe', 'workflow']),
+    count: z.number().int().min(1).max(4),
+    timeoutSeconds: z.number().int().min(30).max(1800),
+    recipe: z.object({
+      unet: z.string().min(1),
+      lora: z.string(),
+      loraStrength: z.number().min(-5).max(5),
+      clip: z.string().min(1),
+      vae: z.string().min(1),
+      width: z.number().int().min(256).max(2048).multipleOf(16),
+      height: z.number().int().min(256).max(2048).multipleOf(16),
+      steps: z.number().int().min(1).max(100),
+      cfg: z.number().min(0).max(30),
+      sampler: z.string().min(1),
+      scheduler: z.string().min(1),
+      shift: z.number().min(0).max(20),
+      removeBackground: z.string()
+    }),
+    workflow: z.string().max(500_000),
+    styles: z.array(z.object({
+      name: z.string().trim().min(1).max(40),
+      prompt: z.string().min(1).max(2000).refine(value => value.includes('{{subject}}'), 'a style prompt must contain {{subject}}'),
+      labelSuffix: z.string().max(40)
+    })).max(20).refine(styles => new Set(styles.map(style => style.name)).size === styles.length, 'style names must differ')
+  }).refine(generator => generator.mode !== 'workflow' || generator.workflow.includes('{{prompt}}'), 'an own workflow must contain {{prompt}}')
 }).strict();
 
 export function fromLegacySelect(selectJson) {
@@ -108,6 +172,17 @@ export function newDocument(options, fill = {}) {
   };
 }
 
+// Missing parts (for example appearance or generator, added later) come from the defaults.
+export function withDefaults(options) {
+  const defaults = structuredClone(DEFAULT_OPTIONS);
+  const generator = options.generator ?? {};
+  return {
+    ...defaults,
+    ...options,
+    generator: { ...defaults.generator, ...generator, recipe: { ...defaults.generator.recipe, ...generator.recipe } }
+  };
+}
+
 export class OptionsStore {
   constructor(dataDir) {
     this.file = join(dataDir, 'options.json');
@@ -121,8 +196,7 @@ export class OptionsStore {
     const store = new OptionsStore(dataDir);
     await mkdir(dataDir, { recursive: true });
     if (existsSync(store.file)) {
-      // Missing parts (for example appearance, added later) come from the defaults.
-      store.options = { ...structuredClone(DEFAULT_OPTIONS), ...JSON.parse(await readFile(store.file, 'utf8')) };
+      store.options = withDefaults(JSON.parse(await readFile(store.file, 'utf8')));
       store.source = 'options.json';
     } else if (existsSync(store.legacyFile)) {
       store.options = fromLegacySelect(JSON.parse(await readFile(store.legacyFile, 'utf8')));
@@ -139,7 +213,7 @@ export class OptionsStore {
     if (!options || typeof options !== 'object' || Array.isArray(options)) {
       throw Object.assign(new Error('Options must be a JSON object'), { statusCode: 400 });
     }
-    const parsed = optionsSchema.safeParse({ ...structuredClone(DEFAULT_OPTIONS), ...options });
+    const parsed = optionsSchema.safeParse(withDefaults(options));
     if (!parsed.success) {
       throw Object.assign(new Error(`Invalid options: ${z.prettifyError(parsed.error)}`), { statusCode: 400 });
     }

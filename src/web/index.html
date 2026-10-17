@@ -121,6 +121,7 @@
       <button type="button" role="tab" data-settings-tab="hosts" class="active"><i class="fa fa-server"></i> <span data-i18n="set.hosts">Proxmox hosts</span></button>
       <button type="button" role="tab" data-settings-tab="notes"><i class="fa fa-sticky-note-o"></i> <span data-i18n="set.notes">Notes</span></button>
       <button type="button" role="tab" data-settings-tab="icons"><i class="fa fa-picture-o"></i> <span data-i18n="set.icons">Icons</span></button>
+      <button type="button" role="tab" data-settings-tab="generator"><i class="fa fa-magic"></i> <span data-i18n="gen.settings">Image generator</span></button>
       <button type="button" role="tab" data-settings-tab="appearance"><i class="fa fa-adjust"></i> <span data-i18n="set.appearance">Appearance</span></button>
     </nav>
 
@@ -200,6 +201,7 @@ pvenode cert info</pre>
           <span class="spacer"></span>
           <label class="button"><i class="fa fa-upload"></i> <span data-i18n="lib.upload">Upload</span><input id="libraryUpload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden></label>
           <button id="btnDashboardIcons" type="button"><i class="fa fa-th-large"></i> <span data-i18n="lib.dashboard">From dashboard-icons</span></button>
+          <button id="btnGenerateIcons" type="button"><i class="fa fa-magic"></i> <span data-i18n="gen.tab">Create with AI</span></button>
         </div>
         <div class="library-toolbar">
           <label class="check"><input id="libraryReplace" type="checkbox" checked> <span data-i18n="lib.replace">Replace icons with the same name (for example when importing a set again)</span></label>
@@ -238,6 +240,62 @@ pvenode cert info</pre>
       </details>
     </section>
 
+    <section class="settings-page" data-settings-page="generator" hidden>
+      <h2 data-i18n="gen.settings">Image generator</h2>
+      <p class="small" data-i18n="gen.settingsHelp">Creates icons with ComfyUI. The service sends the work to ComfyUI and fetches the images, so only this server needs to reach ComfyUI.</p>
+      <fieldset>
+        <legend data-i18n="gen.hosts">ComfyUI hosts</legend>
+        <label class="label"><span data-i18n="gen.hostsHelp">One address per line, for example http://192.0.2.20:8188. They are tried in order; the first that answers is used.</span><textarea id="genHosts" rows="3" spellcheck="false"></textarea></label>
+        <div class="row-buttons">
+          <button id="btnTestGenerator" type="button"><i class="fa fa-plug"></i> <span data-i18n="set.test">Test connection</span></button>
+        </div>
+        <ul id="genTestResult" class="host-list"></ul>
+      </fieldset>
+      <fieldset>
+        <legend data-i18n="gen.workflow">Workflow</legend>
+        <label class="check"><input type="radio" name="genMode" value="recipe"> <span data-i18n="gen.modeRecipe">Built-in recipe: Qwen-Image, then background removal (RMBG)</span></label>
+        <label class="check"><input type="radio" name="genMode" value="workflow"> <span data-i18n="gen.modeWorkflow">My own ComfyUI workflow</span></label>
+        <div id="genRecipe">
+          <p class="small" data-i18n="gen.recipeHelp">A model name may leave out its folder; the service finds it on the ComfyUI host. Leave the LoRA empty to use none, and the background model empty to keep the background.</p>
+          <div class="grid-2">
+            <label class="label"><span data-i18n="gen.unet">Diffusion model</span><input id="genUnet" type="text" spellcheck="false"></label>
+            <label class="label"><span data-i18n="gen.clip">Text encoder</span><input id="genClip" type="text" spellcheck="false"></label>
+            <label class="label"><span data-i18n="gen.lora">LoRA</span><input id="genLora" type="text" spellcheck="false"></label>
+            <label class="label"><span data-i18n="gen.vae">VAE</span><input id="genVae" type="text" spellcheck="false"></label>
+          </div>
+          <div class="grid-3">
+            <label class="label"><span data-i18n="gen.loraStrength">LoRA strength</span><input id="genLoraStrength" type="number" step="0.05"></label>
+            <label class="label"><span data-i18n="gen.steps">Steps</span><input id="genSteps" type="number" min="1" max="100"></label>
+            <label class="label"><span data-i18n="gen.cfg">CFG</span><input id="genCfg" type="number" step="0.1" min="0" max="30"></label>
+            <label class="label"><span data-i18n="gen.sampler">Sampler</span><input id="genSampler" type="text" spellcheck="false"></label>
+            <label class="label"><span data-i18n="gen.scheduler">Scheduler</span><input id="genScheduler" type="text" spellcheck="false"></label>
+            <label class="label"><span data-i18n="gen.shift">Shift</span><input id="genShift" type="number" step="0.1" min="0" max="20"></label>
+            <label class="label"><span data-i18n="gen.width">Width</span><input id="genWidth" type="number" step="16" min="256" max="2048"></label>
+            <label class="label"><span data-i18n="gen.height">Height</span><input id="genHeight" type="number" step="16" min="256" max="2048"></label>
+            <label class="label"><span data-i18n="gen.background">Background removal</span><input id="genBackground" type="text" spellcheck="false" placeholder="RMBG-2.0"></label>
+          </div>
+        </div>
+        <div id="genOwn" hidden>
+          <p class="small" data-i18n="gen.workflowHelp">Export the workflow from ComfyUI with "Export (API)" and paste it here. Put {{prompt}} where the prompt goes; {{seed}}, {{width}}, {{height}} and {{count}} are filled in too. Every image the workflow outputs is shown.</p>
+          <label class="label"><span data-i18n="gen.workflowJson">Workflow (API format)</span><textarea id="genWorkflow" rows="10" spellcheck="false"></textarea></label>
+          <label class="button"><i class="fa fa-file-code-o"></i> <span data-i18n="gen.loadWorkflow">Read a workflow file</span><input id="genWorkflowFile" type="file" accept=".json,application/json" hidden></label>
+        </div>
+        <div class="grid-3">
+          <label class="label"><span data-i18n="gen.defaultCount">Images per run</span><input id="genDefaultCount" type="number" min="1" max="4"></label>
+          <label class="label"><span data-i18n="gen.timeout">Time limit (seconds)</span><input id="genTimeout" type="number" min="30" max="1800"></label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend data-i18n="gen.styles">Styles</legend>
+        <p class="small" data-i18n="gen.stylesHelp">A style is the prompt around what the icon shows; {{subject}} is replaced with it. The name ending is added to the icon's name, for example " (green)".</p>
+        <div id="genStyles"></div>
+        <div class="row-buttons">
+          <button id="btnAddStyle" type="button"><i class="fa fa-plus"></i> <span data-i18n="gen.addStyle">Add style</span></button>
+          <button type="button" class="primary save-options"><i class="fa fa-check"></i> <span data-i18n="set.save">Save settings</span></button>
+        </div>
+      </fieldset>
+    </section>
+
     <section class="settings-page" data-settings-page="appearance" hidden>
       <h2 data-i18n="set.appearance">Appearance</h2>
       <fieldset>
@@ -263,6 +321,7 @@ pvenode cert info</pre>
     <nav class="dialog-tabs">
       <button type="button" data-icon-tab="library" class="active"><i class="fa fa-th"></i> <span data-i18n="lib.title">Icon library</span></button>
       <button type="button" data-icon-tab="dashboard"><i class="fa fa-th-large"></i> <span data-i18n="lib.dashboardTab">dashboard-icons</span></button>
+      <button type="button" data-icon-tab="generate"><i class="fa fa-magic"></i> <span data-i18n="gen.tab">Create with AI</span></button>
     </nav>
     <div id="iconTabLibrary">
       <div class="library-toolbar">
@@ -279,6 +338,28 @@ pvenode cert info</pre>
       </div>
       <p class="muted small" data-i18n="lib.dashboardHelp">Icons from the open dashboard-icons set (github.com/homarr-labs/dashboard-icons). Clicking one copies it into your library.</p>
       <div id="dashboardGrid" class="icon-grid scroll"></div>
+    </div>
+    <div id="iconTabGenerate" hidden>
+      <p id="genNotReady" class="muted small" data-i18n="gen.notReady">No ComfyUI host is set. Add one under Settings → Image generator.</p>
+      <div id="genReady">
+        <div class="grid-2">
+          <label class="label"><span data-i18n="gen.name">Name in the library</span><input id="genName" type="text" autocomplete="off" data-i18n-placeholder="gen.namePlaceholder"></label>
+          <label class="label"><span data-i18n="gen.style">Style</span><select id="genStyle"></select></label>
+        </div>
+        <label class="label"><span data-i18n="gen.subject">What the icon shows</span><textarea id="genSubject" rows="2" data-i18n-placeholder="gen.subjectPlaceholder"></textarea></label>
+        <div class="library-toolbar">
+          <label class="label inline"><span data-i18n="gen.count">Images</span><select id="genCount"><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
+          <label class="label inline"><span data-i18n="gen.host">ComfyUI</span><select id="genHost"></select></label>
+          <button id="btnGenerate" type="button" class="primary"><i class="fa fa-magic"></i> <span data-i18n="gen.create">Create</span></button>
+          <span id="genStatus" class="small"></span>
+        </div>
+        <details class="help">
+          <summary data-i18n="gen.promptSent">Prompt sent to ComfyUI</summary>
+          <p id="genPrompt" class="small code-text"></p>
+        </details>
+        <p class="muted small" data-i18n="gen.pickHelp">Click the image you want; it is added to the library with a transparent border trimmed off.</p>
+        <div id="genGrid" class="icon-grid scroll generated"></div>
+      </div>
     </div>
     <div class="row-buttons end">
       <button id="iconDialogClose" type="button" data-i18n="close">Close</button>

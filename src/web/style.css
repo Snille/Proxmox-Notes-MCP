@@ -222,3 +222,15 @@ pre.code { overflow-x: auto; padding: .6rem; background: var(--panel-2); border-
 .fa-choice { flex-direction: column; gap: .2rem; padding: .45rem .2rem; font-size: 11px; white-space: normal; }
 .fa-choice i { font-size: 18px; }
 #faDialog input[type=search] { margin-top: .2rem; }
+
+/* Create with AI */
+.label.inline { display: inline-flex; align-items: center; gap: .4rem; margin: 0; }
+.label.inline > select { margin-top: 0; }
+.code-text { font-family: ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
+.icon-grid.generated { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.icon-grid.generated .icon-card-pick { width: 150px; height: 150px; }
+.icon-grid.generated .icon-card-pick img { max-width: 150px; max-height: 150px; }
+.style-item { border: 1px solid var(--border); border-radius: 8px; padding: .6rem; margin-bottom: .6rem; }
+.style-item .grid-2 { align-items: end; }
+.test-ok { color: var(--ok, #3fb950); }
+.test-bad { color: var(--bad, #f85149); }

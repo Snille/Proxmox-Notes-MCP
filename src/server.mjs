@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { hostHeaderValidation } from '@modelcontextprotocol/node';
 import { createMcpNodeHandler } from './mcp.mjs';
 import { fetchDashboardIcon, searchDashboardIcons } from './dashboard-icons.mjs';
-import { fromLegacySelect, iconSetUrl } from './options.mjs';
+import * as z from 'zod';
+import { fromLegacySelect, iconSetUrl, optionsSchema, withDefaults } from './options.mjs';
 import { fetchCertificate, testTarget } from './proxmox/client.mjs';
 import { resolveTarget } from './proxmox/targets.mjs';
 import { executeTool } from './tools.mjs';
@@ -69,8 +70,8 @@ async function staticFile(pathname) {
 
 // Embedded icons make a Note up to 8 KB; this leaves room for an imported legacy file or options.
 const MAX_BODY_BYTES = 2_000_000;
-// An icon upload carries the original image too (up to 4 MB, about 5.4 MB as base64).
-const ICON_UPLOAD_BYTES = 6_000_000;
+// An icon upload carries the original image too (up to 8 MB, about 10.7 MB as base64).
+const ICON_UPLOAD_BYTES = 12_000_000;
 
 function sendJson(res, status, document) {
   const body = JSON.stringify(document);
@@ -179,6 +180,36 @@ async function handleIcons(req, res, url, icons, options) {
   return true;
 }
 
+// Icon generation: start a job, poll it, fetch its images, and test the ComfyUI hosts.
+async function handleGenerator(req, res, url, generator) {
+  const path = url.pathname;
+  if (!generator || !(path.startsWith('/api/generate') || path === '/api/generator/test')) {
+    return false;
+  }
+  if (req.method === 'POST' && path === '/api/generator/test') {
+    const parsed = optionsSchema.shape.generator.safeParse(withDefaults({ generator: await readJsonBody(req) }).generator);
+    if (!parsed.success) throw Object.assign(new Error(z.prettifyError(parsed.error)), { statusCode: 400 });
+    sendJson(res, 200, await generator.test(parsed.data));
+    return true;
+  }
+  if (req.method === 'POST' && path === '/api/generate') {
+    sendJson(res, 200, { job: await generator.start(await readJsonBody(req)) });
+    return true;
+  }
+  const job = path.match(/^\/api\/generate\/([0-9a-f-]{36})$/);
+  if (req.method === 'GET' && job) {
+    sendJson(res, 200, { job: generator.publicJob(generator.get(job[1])) });
+    return true;
+  }
+  const image = path.match(/^\/api\/generate\/([0-9a-f-]{36})\/(\d)\.png$/);
+  if (req.method === 'GET' && image) {
+    sendImage(res, generator.image(image[1], Number(image[2])), 'image/png');
+    return true;
+  }
+  sendJson(res, 404, { error: 'Unknown generator endpoint' });
+  return true;
+}
+
 async function handleSettings(req, url, proxmox) {
   const store = proxmox?.store;
   if (!url.pathname.startsWith('/api/settings/')) {
@@ -229,7 +260,7 @@ async function handleSettings(req, url, proxmox) {
   return { status: 404, body: { error: 'Unknown settings endpoint' } };
 }
 
-export function createNotesServer({ settings, options, tools, proxmox, icons }) {
+export function createNotesServer({ settings, options, tools, proxmox, icons, generator }) {
   const toolMap = new Map(tools.map(tool => [tool.name, tool]));
   const validateHost = settings.allowedHosts.length ? hostHeaderValidation(settings.allowedHosts) : null;
   const mcp = createMcpNodeHandler(tools);
@@ -297,6 +328,9 @@ export function createNotesServer({ settings, options, tools, proxmox, icons }) 
 
       // The settings page. Not offered over MCP: token secrets should not pass through an assistant.
       if (await handleIcons(req, res, url, icons, options)) {
+        return;
+      }
+      if (await handleGenerator(req, res, url, generator)) {
         return;
       }
 
