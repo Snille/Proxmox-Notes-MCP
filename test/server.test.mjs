@@ -41,6 +41,23 @@ describe('HTTP', () => {
     expect(await page.text()).toContain('<title>Proxmox Notes</title>');
   });
 
+  it('serves the format modules to the browser and nothing outside the web roots', async () => {
+    const { base } = await start();
+    const module = await fetch(`${base}/format/render.mjs`);
+    expect(module.headers.get('content-type')).toContain('text/javascript');
+    expect(await module.text()).toContain('export function renderNotes');
+    expect((await fetch(`${base}/vendor/font-awesome/fonts/fontawesome-webfont.woff2?v=4.7.0`)).headers.get('content-type')).toBe('font/woff2');
+    for (const path of ['/..%2fpackage.json', '/format/..%2f..%2fpackage.json', '/%2e%2e/%2e%2e/package.json', '/server.mjs']) {
+      expect((await fetch(`${base}${path}`)).status, path).toBe(404);
+    }
+  });
+
+  it('refuses an icon request without a valid key or icon set', async () => {
+    const { base } = await start();
+    expect((await fetch(`${base}/api/icon?key=sonarr01-`)).status).toBe(400);
+    expect((await fetch(`${base}/api/icon?key=../../etc`)).status).toBe(400);
+  });
+
   it('parses and renders through the REST tools', async () => {
     const { base } = await start();
     const parsed = await (await post(base, '/api/tools/notes_parse', { markdown: sonarr })).json();

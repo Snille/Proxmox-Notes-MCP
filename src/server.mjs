@@ -1,8 +1,11 @@
 import { timingSafeEqual } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
+import { extname, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { hostHeaderValidation } from '@modelcontextprotocol/node';
 import { createMcpNodeHandler } from './mcp.mjs';
+import { iconSetUrl } from './options.mjs';
 import { executeTool } from './tools.mjs';
 import { version } from './version.mjs';
 
@@ -16,11 +19,50 @@ const SECURITY_HEADERS = {
 // Icons in the preview may be embedded (data:) or come from an icon-set web server (https:).
 const CONTENT_SECURITY_POLICY = "default-src 'self'; img-src 'self' data: https:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
 
-const WEB_ASSETS = {
-  '/': { file: 'index.html', type: 'text/html; charset=utf-8' },
-  '/app.js': { file: 'app.js', type: 'text/javascript; charset=utf-8' },
-  '/style.css': { file: 'style.css', type: 'text/css; charset=utf-8' }
+// Static files: the web GUI from src/web, and the Notes format modules from src/format, which
+// the browser imports directly so the preview renders exactly like the server does.
+const STATIC_ROOTS = [
+  { prefix: '/format/', dir: resolve(fileURLToPath(new URL('./format/', import.meta.url))) },
+  { prefix: '/', dir: resolve(fileURLToPath(new URL('./web/', import.meta.url))) }
+];
+
+const CONTENT_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.woff2': 'font/woff2',
+  '.woff': 'font/woff',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.txt': 'text/plain; charset=utf-8'
 };
+
+const MAX_ICON_BYTES = 2_000_000;
+
+async function staticFile(pathname) {
+  const root = STATIC_ROOTS.find(r => pathname.startsWith(r.prefix));
+  if (!root) {
+    return null;
+  }
+  let relative = decodeURIComponent(pathname.slice(root.prefix.length));
+  if (relative === '' || relative.endsWith('/')) {
+    relative += 'index.html';
+  }
+  const file = resolve(root.dir, relative);
+  const type = CONTENT_TYPES[extname(file).toLowerCase()];
+  if (!type || !file.startsWith(root.dir + sep)) {
+    return null;
+  }
+  try {
+    if (!(await stat(file)).isFile()) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+  return { body: await readFile(file), type };
+}
 
 // Embedded icons make a Note up to 8 KB; this leaves room for an imported legacy file or options.
 const MAX_BODY_BYTES = 2_000_000;
@@ -81,7 +123,6 @@ export function createNotesServer({ settings, options, tools }) {
   const toolMap = new Map(tools.map(tool => [tool.name, tool]));
   const validateHost = settings.allowedHosts.length ? hostHeaderValidation(settings.allowedHosts) : null;
   const mcp = createMcpNodeHandler(tools);
-  const webRoot = new URL('./web/', import.meta.url);
 
   const server = createServer(async (req, res) => {
     if (validateHost && !validateHost(req, res)) {
@@ -98,16 +139,39 @@ export function createNotesServer({ settings, options, tools }) {
         return;
       }
 
-      const asset = req.method === 'GET' && WEB_ASSETS[url.pathname];
+      // An icon from the configured icon set, fetched by the server so the browser can embed it
+      // (a canvas cannot read a cross-origin image). Only URLs built from the icon set are fetched.
+      if (req.method === 'GET' && url.pathname === '/api/icon') {
+        const source = iconSetUrl(options.get().iconSet, url.searchParams.get('key'));
+        if (!source || !/^[\w.-]+-$/.test(url.searchParams.get('key'))) {
+          sendJson(res, 400, { error: 'An icon-set key is required, and an icon set must be configured' });
+          return;
+        }
+        const upstream = await fetch(source, { redirect: 'error', signal: AbortSignal.timeout(10_000) }).catch(() => null);
+        const type = upstream?.headers.get('content-type') ?? '';
+        if (!upstream?.ok || !type.startsWith('image/') || type.includes('svg')) {
+          sendJson(res, 502, { error: `The icon set did not return a raster image for this key (${upstream ? upstream.status : 'not reachable'})` });
+          return;
+        }
+        const body = Buffer.from(await upstream.arrayBuffer());
+        if (body.length > MAX_ICON_BYTES) {
+          sendJson(res, 502, { error: 'The icon is larger than 2 MB' });
+          return;
+        }
+        res.writeHead(200, { 'content-type': type, 'content-length': body.length, ...SECURITY_HEADERS });
+        res.end(body);
+        return;
+      }
+
+      const asset = req.method === 'GET' && await staticFile(url.pathname);
       if (asset) {
-        const body = await readFile(new URL(asset.file, webRoot));
         res.writeHead(200, {
           'content-type': asset.type,
-          'content-length': body.length,
+          'content-length': asset.body.length,
           'content-security-policy': CONTENT_SECURITY_POLICY,
           ...SECURITY_HEADERS
         });
-        res.end(body);
+        res.end(asset.body);
         return;
       }
 

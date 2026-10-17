@@ -2,7 +2,7 @@
 
 A self-hosted service that creates, reads and edits the Notes (description) of Proxmox LXC containers and VMs. It has a web GUI, a REST API and an MCP server, and it replaces the browser-only [Proxmox Notes Generator](https://github.com/Snille/Proxmox-Notes).
 
-Status: **0.3.0, early development.** The Notes format, the server (REST, MCP, Docker) and reading from Proxmox work. Writing to Proxmox, the real web GUI and the icon tools are not built yet; the web page is only a test page for now.
+Status: **0.4.0, early development.** The Notes format, the server (REST, MCP, Docker), reading from Proxmox and the web GUI work. Writing to Proxmox and icon generation are not built yet: for now, copy the Markdown into Proxmox by hand.
 
 ## What it will do
 
@@ -59,6 +59,18 @@ A pinned connection makes a full TLS handshake every time (no session reuse), be
 
 The guests' facts come from their config: hostname, IP (static, or the DHCP address of a running LXC), MAC (written in lower case), DHCP and OS type. A VM's address is only known when it uses cloud-init; otherwise it needs the QEMU guest agent, which is not used yet.
 
+## The web GUI
+
+- **Guest list**: pick a Proxmox host; every guest shows whether its Notes are in the Notes format, other text, or empty.
+- **Editor**: heading icon and title, icon image, description, notes and the sections with their rows (add, move, remove). A guest with no Notes gets a new Note filled in from the template and from Proxmox. Notes that do not follow the format open as raw text, so nothing is lost.
+- **Live preview**, rendered by the same code as the server and cleaned the way current Proxmox versions clean Notes (inline styles removed, only safe tags, attributes and URLs). A bar shows the size against the 8192-character limit, and a badge shows when the Note differs from what Proxmox has.
+- **Icons**: choose one from the icon set, upload an image, or none. By default the icon is embedded as WebP, sized to fit the space left in the Note; untick *Embed* to link to the icon set instead.
+- **From Proxmox**: one button updates IP, MAC, DHCP and OS from the guest's config. When the IP changes, service links that pointed at the old IP move along. An exact OS release in the Note ("Debian 13") is kept when Proxmox only knows the family ("Debian").
+- **Import and export**: export a Note as JSON; import JSON from this tool or from the old Notes Generator, or Markdown. **Copy Markdown** puts the text on the clipboard for the Proxmox Notes field.
+- **Save to Proxmox** is not built yet (next step).
+
+The browser loads the Notes format modules from `/format/`, so the preview matches what the server renders. Font Awesome 4.7 is bundled (font: SIL OFL 1.1, CSS: MIT; see `src/web/vendor/font-awesome/LICENSE.txt`), because Proxmox uses that version for the icons in Notes.
+
 ## Run it
 
 With Docker Compose or as a Portainer stack, using [compose.yaml](compose.yaml):
@@ -99,7 +111,8 @@ The choices in the forms (heading icons, icon-set images, OS names and the templ
 
 | Path | What |
 |------|------|
-| `/` | Web GUI (a test page for now) |
+| `/` | Web GUI |
+| `/api/icon?key=<key>` | An icon from the configured icon set, fetched by the server so the browser can embed it. Only URLs built from the icon set are fetched. |
 | `/api/tools/{name}` | REST: `POST` a tool's arguments as JSON |
 | `/api/options` | `GET` or `PUT` the options |
 | `/mcp` | MCP over Streamable HTTP |
@@ -126,7 +139,7 @@ npm run check
 | `src/server.mjs`, `src/mcp.mjs`, `src/tools.mjs` | HTTP server, MCP server and the tools both use |
 | `src/options.mjs`, `src/config.mjs` | Instance options (`/data/options.json`) and environment settings |
 | `src/proxmox/` | Targets (`targets.json`), the API client with certificate pinning, and guest facts |
-| `src/web/` | The web page |
+| `src/web/` | The web GUI: `app.js`, `preview.js` (Proxmox-like rendering and sanitizing), `icons.js` (embedding), bundled Font Awesome |
 | `test/` | Vitest tests |
 | `reference/examples/` | Eleven real Notes with addresses and names replaced, used as golden test files |
 | `reference/select.json` | The old generator's options file (icons, image keys, OS names) |
@@ -139,7 +152,7 @@ npm run check
 1. ✅ Notes format: document model, render, parse, round-trip tests.
 2. ✅ Server: Docker image, configuration, REST API, MCP (HTTP and stdio).
 3. Proxmox: ✅ list guests on several hosts, read Notes, prefill from facts. Next: write with preview and snapshot.
-4. Web GUI: guest list, editor with live preview, save to Proxmox, JSON export and import, options editor (replaces `select.json`).
+4. Web GUI: ✅ guest list, editor with live preview, icons, JSON export and import. Next: save to Proxmox, and an options editor (replaces `select.json`).
 5. Icons: icon library, embed from file or URL, dashboard-icons.
 6. Icon generation: ComfyUI first, then the cloud services one at a time.
 7. Release: licence, container image built by GitHub Actions, ready-made Portainer stack.

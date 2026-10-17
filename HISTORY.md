@@ -1,5 +1,15 @@
 # History
 
+## 0.4.0 - 2026-10-17
+
+- The web GUI replaces the test page: a guest list per Proxmox host (with each guest's Notes state), an editor for every part of a Note, a live preview, a size bar against the 8192-character limit, and a badge when the Note differs from what Proxmox has. Notes that do not follow the format open as raw text instead of being dropped.
+- The preview uses the same render code as the server: the browser imports `src/format/` from `/format/`. The preview HTML is cleaned like current Proxmox versions clean Notes (allowed tags and attributes only, no `style`, safe `href`/`src`), so it also shows what Proxmox will show, and a Note cannot run script in the editor.
+- Icons are embedded by default: the browser draws the image on a canvas and encodes WebP at the highest quality that fits the space left in the Note (PNG when the browser cannot make WebP). Icon-set images come through `/api/icon`, which fetches only URLs built from the configured icon set, because a canvas cannot read a cross-origin image.
+- "Update from Proxmox" fills IP, MAC, DHCP and OS from the guest's config and moves service links from the old IP to the new one; this was done with `sed` by hand at every cutover in the Arr rebuild.
+- Import of JSON (this tool and the old Notes Generator) and Markdown; export as JSON; copy Markdown with a fallback when the clipboard API is not available (plain http).
+- `notes_guests` takes `notes: true` to report each guest's Notes state (four config reads at a time).
+- Static files are served from the web and format folders only, with path checks; Font Awesome 4.7 (woff2/woff) is bundled with its licence.
+
 ## 0.3.0 - 2026-10-17
 
 - Read from Proxmox. Hosts are listed in `/data/targets.json` with an API token per host; the secret is read from a file (`tokenSecretFile`, for example a Docker secret) and is kept out of every response and log. Four read-only tools: `notes_hosts`, `notes_guests`, `notes_read` (Markdown, parsed document and facts) and `notes_prefill` (a new Note from the template, filled with hostname, IP, MAC, DHCP, OS and today's date).

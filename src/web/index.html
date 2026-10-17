@@ -4,21 +4,116 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Proxmox Notes</title>
+  <link rel="stylesheet" href="/vendor/font-awesome/css/font-awesome.css">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <header>
-    <h1>Proxmox Notes</h1>
-    <span id="status">…</span>
+  <header class="topbar">
+    <h1><i class="fa fa-sticky-note-o"></i> Proxmox Notes</h1>
+    <span id="version" class="muted"></span>
+    <div class="spacer"></div>
+    <div class="actions">
+      <button id="btnNew" type="button" title="Start a new Note from the template"><i class="fa fa-file-o"></i> New</button>
+      <label class="button" title="Import a Note from JSON (this tool or the old Notes Generator) or Markdown"><i class="fa fa-upload"></i> Import<input id="fileImport" type="file" accept=".json,.md,.txt,application/json,text/markdown,text/plain" hidden></label>
+      <button id="btnExport" type="button" title="Download the Note as JSON"><i class="fa fa-download"></i> Export JSON</button>
+      <button id="btnCopy" type="button" title="Copy the Markdown for the Proxmox Notes field"><i class="fa fa-clipboard"></i> Copy Markdown</button>
+      <button id="btnSave" type="button" class="primary" disabled title="Writing to Proxmox is not built yet"><i class="fa fa-floppy-o"></i> Save to Proxmox</button>
+    </div>
   </header>
-  <main>
-    <p>The full editor is not built yet. This page checks that the service runs: paste a Note's Markdown and read it into the document model.</p>
-    <label for="markdown">Notes Markdown</label>
-    <textarea id="markdown" rows="14" spellcheck="false"></textarea>
-    <button id="parse" type="button">Parse</button>
-    <p id="summary" role="status"></p>
-    <pre id="result"></pre>
-  </main>
-  <script src="/app.js"></script>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <label for="hostSelect" class="label">Proxmox host</label>
+      <select id="hostSelect"></select>
+      <div class="sidebar-row">
+        <input id="guestFilter" type="search" placeholder="Filter guests" aria-label="Filter guests">
+        <button id="btnReload" type="button" class="icon" title="Reload the guest list"><i class="fa fa-refresh"></i></button>
+      </div>
+      <ul id="guestList" class="guest-list" aria-label="Guests"></ul>
+      <p id="guestMessage" class="muted small"></p>
+    </aside>
+
+    <main class="workspace">
+      <div id="banner" class="banner" hidden></div>
+      <div class="context">
+        <span id="contextLabel" class="muted">No guest selected. Pick one on the left, or start a new Note.</span>
+        <span id="dirty" class="badge warn" hidden>Changed</span>
+      </div>
+
+      <div class="columns">
+        <section class="editor" aria-label="Editor">
+          <div id="formMode">
+            <fieldset>
+              <legend>Heading</legend>
+              <div class="grid-2">
+                <label class="label">Icon<select id="headerIcon"></select></label>
+                <label class="label">Title<input id="title" type="text" autocomplete="off"></label>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Icon image</legend>
+              <div class="icon-panel">
+                <div class="icon-thumb" id="iconThumb"><i class="fa fa-picture-o"></i></div>
+                <div class="icon-controls">
+                  <label class="label">From the icon set<select id="iconKey"><option value="">—</option></select></label>
+                  <label class="check"><input id="embed" type="checkbox" checked> Embed in the Note (no web server needed)</label>
+                  <div class="row-buttons">
+                    <label class="button small"><i class="fa fa-image"></i> Upload image<input id="iconUpload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden></label>
+                    <button id="btnIconRemove" type="button" class="small"><i class="fa fa-times"></i> No icon</button>
+                  </div>
+                  <p id="iconInfo" class="muted small"></p>
+                </div>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Text</legend>
+              <label class="label">Description<textarea id="description" rows="3"></textarea></label>
+              <label class="label">Notes<textarea id="notes" rows="6"></textarea></label>
+              <p class="muted small">New lines become line breaks. Simple HTML such as &lt;b&gt; works in Proxmox.</p>
+            </fieldset>
+
+            <fieldset id="factsBox" hidden>
+              <legend>From Proxmox</legend>
+              <p id="factsText" class="small"></p>
+              <button id="btnApplyFacts" type="button" class="small"><i class="fa fa-magic"></i> Update IP, MAC, DHCP and OS from Proxmox</button>
+            </fieldset>
+
+            <div id="sections"></div>
+          </div>
+
+          <div id="rawMode" hidden>
+            <fieldset>
+              <legend>Raw Markdown</legend>
+              <p class="small">This text does not follow the Notes format, so it cannot be shown as a form. Nothing is lost: you can edit it here as text.</p>
+              <textarea id="raw" rows="22" spellcheck="false"></textarea>
+              <div class="row-buttons">
+                <button id="btnRawParse" type="button" class="small"><i class="fa fa-repeat"></i> Read as form again</button>
+                <button id="btnRawTemplate" type="button" class="small"><i class="fa fa-file-o"></i> Replace with a new Note from the template</button>
+              </div>
+            </fieldset>
+          </div>
+        </section>
+
+        <section class="preview-pane" aria-label="Preview">
+          <div class="tabs" role="tablist">
+            <button type="button" role="tab" data-tab="preview" class="active">Preview</button>
+            <button type="button" role="tab" data-tab="markdown">Markdown</button>
+          </div>
+          <div id="preview" class="pve-notes"></div>
+          <textarea id="markdownOut" class="markdown-out" rows="24" readonly spellcheck="false" hidden></textarea>
+          <div class="size">
+            <div class="size-bar"><div id="sizeFill"></div></div>
+            <span id="sizeText" class="small"></span>
+          </div>
+          <p class="muted small">The preview follows the rules of current Proxmox versions: inline styles are removed, embedded PNG/JPEG/WebP images are shown.</p>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+  <script type="module" src="/app.js"></script>
 </body>
 </html>

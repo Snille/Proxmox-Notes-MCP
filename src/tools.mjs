@@ -47,6 +47,17 @@ function rendered(doc) {
 const hostSchema = z.string().describe('Proxmox host id from notes_hosts');
 const vmidSchema = z.coerce.number().int().positive().describe('Guest id (VMID)');
 
+async function mapLimit(items, limit, worker) {
+  let next = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const item = items[next++];
+      await worker(item);
+    }
+  });
+  await Promise.all(runners);
+}
+
 async function readGuest(proxmox, host, vmid) {
   const client = proxmox.client(host);
   const guest = await client.guest(vmid);
@@ -110,10 +121,28 @@ export function buildTools({ options, proxmox }) {
     {
       name: 'notes_guests',
       title: 'Guests on a host',
-      description: 'List the LXC containers and VMs on one Proxmox host that the token can see.',
+      description: 'List the LXC containers and VMs on one Proxmox host that the token can see. With notes=true, also tell for each guest whether its Notes are empty, in the Notes format, or other text.',
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
-      inputSchema: z.object({ host: hostSchema }).strict(),
-      handler: async ({ host }) => ({ host, guests: await proxmox.client(host).guests() })
+      inputSchema: z.object({ host: hostSchema, notes: z.boolean().default(false) }).strict(),
+      handler: async ({ host, notes }) => {
+        const client = proxmox.client(host);
+        const guests = await client.guests();
+        if (notes) {
+          // One config read per guest, a few at a time, so a large host is not flooded.
+          await mapLimit(guests, 4, async guest => {
+            try {
+              const markdown = (await client.config(guest)).description ?? '';
+              const parsed = markdown.trim() ? parseNotes(markdown) : null;
+              guest.notes = !parsed ? 'empty' : parsed.ok ? 'format' : 'other';
+              guest.noteTitle = parsed?.ok ? parsed.doc.title : '';
+            } catch (error) {
+              guest.notes = 'error';
+              guest.noteError = error.message;
+            }
+          });
+        }
+        return { host, guests };
+      }
     },
     {
       name: 'notes_read',
