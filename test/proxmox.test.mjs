@@ -27,7 +27,7 @@ describe('targets', () => {
     const [target] = await loadTargets(file);
     expect(target.secret).toBe('not-a-real-secret');
     expect(JSON.stringify(target)).not.toContain('not-a-real-secret');
-    expect(publicTarget(target)).toEqual({ id: 'pve1', name: 'pve1', baseUrl: 'https://192.0.2.10:8006', tokenId: 'proxmox-notes@pve!notes', tls: 'pinned' });
+    expect(publicTarget(target)).toEqual({ id: 'pve1', name: 'pve1', baseUrl: 'https://192.0.2.10:8006', tokenId: 'proxmox-notes@pve!notes', tls: 'pinned', fingerprint: FINGERPRINT, verifyTls: true, secretSource: 'file' });
     expect(JSON.stringify(new Proxmox([target]).hosts())).not.toContain('not-a-real-secret');
   });
 

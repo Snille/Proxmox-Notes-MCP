@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { field, link, SCHEMA, section } from './format/index.mjs';
+import * as z from 'zod';
+import { field, LAYOUTS, link, SCHEMA, section } from './format/index.mjs';
 
 // The options of one instance: choices offered in forms, the icon set, and the template for a new Note.
 // Stored as <dataDir>/options.json. A select.json from the original generator is converted on first start.
@@ -32,8 +33,35 @@ export const DEFAULT_OPTIONS = {
       section('services', [link('WebGUI', 'https://')]),
       section('access', [field('User', 'root'), field('SSH Key', 'No'), field('Password', 'No')])
     ]
-  }
+  },
+  // Defaults for every viewer; each browser can override them on the settings page.
+  appearance: { theme: 'system', language: 'en' }
 };
+
+const FA_CLASS = z.string().regex(/^fa-[a-z0-9-]+( fa-[a-z0-9-]+)*$/, 'Font Awesome classes such as "fa-linux" or "fa-key fa-fw"');
+const rowSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('field'), key: z.string(), value: z.string() }),
+  z.object({ type: z.literal('link'), name: z.string(), url: z.string() }),
+  z.object({ type: z.literal('text'), text: z.string() })
+]);
+
+export const optionsSchema = z.object({
+  headerIcons: z.array(z.object({ label: z.string().min(1), icon: FA_CLASS })),
+  layout: z.enum(LAYOUTS),
+  iconSet: z.object({
+    baseUrl: z.union([z.literal(''), z.url().refine(v => /^https?:\/\//.test(v), 'http(s) only')]),
+    width: z.number().int().min(16).max(512),
+    height: z.number().int().min(16).max(512),
+    extension: z.string().regex(/^\.[a-z0-9]+$/)
+  }),
+  images: z.array(z.object({ label: z.string().min(1), key: z.string().regex(/^[\w.-]+-$/, 'an icon key ends with "-", for example "sonarr01-"') })),
+  osNames: z.array(z.string().min(1)),
+  template: z.object({
+    headerIcon: FA_CLASS,
+    sections: z.array(z.object({ id: z.string().min(1), title: z.string().min(1), icon: FA_CLASS, rows: z.array(rowSchema) }))
+  }),
+  appearance: z.object({ theme: z.enum(['system', 'dark', 'light']), language: z.enum(['en', 'sv']) })
+}).strict();
 
 export function fromLegacySelect(selectJson) {
   const cfg = selectJson?.['proxmox-notes'];
@@ -45,7 +73,7 @@ export function fromLegacySelect(selectJson) {
     ...DEFAULT_OPTIONS,
     headerIcons: Object.entries(cfg.select01 ?? {}).map(([label, value]) => ({
       // The generator's labels start with the Font Awesome glyph itself (a private-use character).
-      label: (typeof value === 'object' ? value.text ?? label : String(value)).replace(/[-]/g, '').trim(),
+      label: (typeof value === 'object' ? value.text ?? label : String(value)).replace(/[\uE000-\uF8FF]/g, '').trim(),
       icon: typeof value === 'object' ? value['fa-objects'] ?? value.fa ?? value.class ?? label : label
     })),
     iconSet: {
@@ -93,6 +121,7 @@ export class OptionsStore {
     const store = new OptionsStore(dataDir);
     await mkdir(dataDir, { recursive: true });
     if (existsSync(store.file)) {
+      // Missing parts (for example appearance, added later) come from the defaults.
       store.options = { ...structuredClone(DEFAULT_OPTIONS), ...JSON.parse(await readFile(store.file, 'utf8')) };
       store.source = 'options.json';
     } else if (existsSync(store.legacyFile)) {
@@ -110,7 +139,11 @@ export class OptionsStore {
     if (!options || typeof options !== 'object' || Array.isArray(options)) {
       throw Object.assign(new Error('Options must be a JSON object'), { statusCode: 400 });
     }
-    const next = { ...structuredClone(DEFAULT_OPTIONS), ...options };
+    const parsed = optionsSchema.safeParse({ ...structuredClone(DEFAULT_OPTIONS), ...options });
+    if (!parsed.success) {
+      throw Object.assign(new Error(`Invalid options: ${z.prettifyError(parsed.error)}`), { statusCode: 400 });
+    }
+    const next = parsed.data;
     const temporary = `${this.file}.tmp`;
     await writeFile(temporary, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
     await rename(temporary, this.file);

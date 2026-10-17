@@ -11,7 +11,7 @@ const options = await OptionsStore.open(settings.dataDir);
 const proxmox = await Proxmox.open(settings.targetsFile);
 const snapshots = new SnapshotStore(settings.dataDir);
 const tools = buildTools({ options, proxmox, snapshots });
-const server = createNotesServer({ settings, options, tools });
+const server = createNotesServer({ settings, options, tools, proxmox });
 
 server.listen(settings.port, settings.host, () => {
   console.log(JSON.stringify({

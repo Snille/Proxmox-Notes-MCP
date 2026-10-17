@@ -21,7 +21,8 @@ async function start(env = {}, prepare) {
   }
   const settings = loadSettings({ DATA_DIR: dataDir, ...env });
   const options = await OptionsStore.open(dataDir);
-  server = createNotesServer({ settings, options, tools: buildTools({ options, proxmox: new Proxmox([]), snapshots: new SnapshotStore(dataDir) }) });
+  const proxmox = await Proxmox.open(join(dataDir, 'targets.json'));
+  server = createNotesServer({ settings, options, proxmox, tools: buildTools({ options, proxmox, snapshots: new SnapshotStore(dataDir) }) });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   return { base: `http://127.0.0.1:${server.address().port}`, dataDir };
 }
@@ -138,5 +139,74 @@ describe('MCP', () => {
     }));
     expect((await client.listTools()).tools.length).toBe(14);
     await client.close();
+  });
+});
+
+describe('settings: Proxmox hosts', () => {
+  const host = { id: 'pve1', name: 'PVE 1', baseUrl: 'https://127.0.0.1:1', tokenId: 'proxmox-notes@pve!notes', tokenSecret: 'not-a-real-secret', verifyTls: false };
+  const put = (base, body, id = body.id) => fetch(`${base}/api/settings/hosts/${id}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+  it('adds, lists without the secret, keeps the secret on update, and removes', async () => {
+    const { base, dataDir } = await start();
+    expect((await put(base, host)).status).toBe(200);
+
+    const listed = await (await fetch(`${base}/api/settings/hosts`)).json();
+    expect(listed.hosts).toEqual([{ id: 'pve1', name: 'PVE 1', baseUrl: 'https://127.0.0.1:1', tokenId: 'proxmox-notes@pve!notes', tls: 'insecure', fingerprint: '', verifyTls: false, secretSource: 'stored' }]);
+    expect(JSON.stringify(listed)).not.toContain('not-a-real-secret');
+    expect((await (await post(base, '/api/tools/notes_hosts', {})).json()).hosts.map(h => h.id)).toEqual(['pve1']);
+
+    // An update without a secret keeps the stored one.
+    expect((await put(base, { ...host, name: 'Renamed', tokenSecret: '' })).status).toBe(200);
+    const file = JSON.parse(await readFile(join(dataDir, 'targets.json'), 'utf8'));
+    expect(file.targets[0]).toMatchObject({ name: 'Renamed', tokenSecret: 'not-a-real-secret' });
+
+    expect((await fetch(`${base}/api/settings/hosts/pve1`, { method: 'DELETE' })).status).toBe(200);
+    expect((await (await fetch(`${base}/api/settings/hosts`)).json()).hosts).toEqual([]);
+    expect((await (await post(base, '/api/tools/notes_hosts', {})).json()).hosts).toEqual([]);
+  });
+
+  it('refuses a new host without a secret, http, and a mismatched id', async () => {
+    const { base } = await start();
+    expect((await put(base, { ...host, tokenSecret: '' })).status).toBe(400);
+    expect((await put(base, { ...host, baseUrl: 'http://127.0.0.1:1' })).status).toBe(400);
+    expect((await put(base, host, 'other')).status).toBe(400);
+  });
+
+  it('reports a host that cannot be reached', async () => {
+    const { base } = await start();
+    const tested = await (await post(base, '/api/settings/hosts/test', host)).json();
+    expect(tested).toMatchObject({ ok: false });
+    expect(tested.error).toMatch(/not reachable/);
+    expect((await post(base, '/api/settings/certificate', { baseUrl: 'https://127.0.0.1:1' })).status).toBe(502);
+  });
+
+  it('is not reachable from a page on another site', async () => {
+    const { base } = await start();
+    expect((await post(base, '/api/settings/hosts/test', host, { origin: 'https://evil.example' })).status).toBe(403);
+  });
+});
+
+describe('options validation', () => {
+  it('refuses options that break the form', async () => {
+    const { base } = await start();
+    const current = await (await fetch(`${base}/api/options`)).json();
+    const bad = await fetch(`${base}/api/options`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...current, layout: 'fancy' }) });
+    expect(bad.status).toBe(400);
+    expect((await bad.json()).error).toMatch(/Invalid options/);
+    const good = await fetch(`${base}/api/options`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...current, appearance: { theme: 'dark', language: 'sv' } }) });
+    expect(good.status).toBe(200);
+  });
+});
+
+describe('settings: select.json import', () => {
+  it('converts the old generator file without saving it', async () => {
+    const { base, dataDir } = await start();
+    const selectJson = JSON.parse(await readFile(new URL('../reference/select.json', import.meta.url), 'utf8'));
+    const response = await post(base, '/api/settings/import-select', { selectJson });
+    expect(response.status).toBe(200);
+    const converted = await response.json();
+    expect(converted.images).toContainEqual({ label: 'Default 01', key: 'default01-' });
+    await expect(readFile(join(dataDir, 'options.json'), 'utf8')).rejects.toThrow();
+    expect((await post(base, '/api/settings/import-select', { selectJson: { nope: 1 } })).status).toBe(400);
   });
 });

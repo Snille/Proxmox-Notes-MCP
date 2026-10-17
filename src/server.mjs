@@ -5,7 +5,9 @@ import { extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hostHeaderValidation } from '@modelcontextprotocol/node';
 import { createMcpNodeHandler } from './mcp.mjs';
-import { iconSetUrl } from './options.mjs';
+import { fromLegacySelect, iconSetUrl } from './options.mjs';
+import { fetchCertificate, testTarget } from './proxmox/client.mjs';
+import { resolveTarget } from './proxmox/targets.mjs';
 import { executeTool } from './tools.mjs';
 import { version } from './version.mjs';
 
@@ -119,7 +121,57 @@ function hasMcpToken(req, token) {
   return given.length === expected.length && timingSafeEqual(given, expected);
 }
 
-export function createNotesServer({ settings, options, tools }) {
+async function handleSettings(req, url, proxmox) {
+  const store = proxmox?.store;
+  if (!url.pathname.startsWith('/api/settings/')) {
+    return null;
+  }
+  // Converts the old generator's select.json for the settings form; nothing is saved here.
+  if (req.method === 'POST' && url.pathname === '/api/settings/import-select') {
+    const { selectJson } = await readJsonBody(req);
+    try {
+      return { body: fromLegacySelect(selectJson) };
+    } catch (error) {
+      throw Object.assign(error, { statusCode: 400 });
+    }
+  }
+  if (!store) {
+    throw Object.assign(new Error('Host settings are not available in this setup'), { statusCode: 404 });
+  }
+  if (req.method === 'GET' && url.pathname === '/api/settings/hosts') {
+    return { body: { hosts: store.list(), file: store.file } };
+  }
+  if (req.method === 'POST' && url.pathname === '/api/settings/certificate') {
+    const { baseUrl } = await readJsonBody(req);
+    return { body: await fetchCertificate(String(baseUrl ?? '')) };
+  }
+  if (req.method === 'POST' && url.pathname === '/api/settings/hosts/test') {
+    const target = await resolveTarget(store.merge(await readJsonBody(req)));
+    try {
+      return { body: await testTarget(target) };
+    } catch (error) {
+      return { body: { ok: false, error: error.message } };
+    }
+  }
+  const match = url.pathname.match(/^\/api\/settings\/hosts\/([a-z0-9-]+)$/);
+  if (match && req.method === 'PUT') {
+    const input = await readJsonBody(req);
+    if (input.id !== match[1]) {
+      throw Object.assign(new Error('The id in the path and in the body differ'), { statusCode: 400 });
+    }
+    const host = await store.upsert(input);
+    await proxmox.reload();
+    return { body: { host } };
+  }
+  if (match && req.method === 'DELETE') {
+    await store.remove(match[1]);
+    await proxmox.reload();
+    return { body: { removed: match[1] } };
+  }
+  return { status: 404, body: { error: 'Unknown settings endpoint' } };
+}
+
+export function createNotesServer({ settings, options, tools, proxmox }) {
   const toolMap = new Map(tools.map(tool => [tool.name, tool]));
   const validateHost = settings.allowedHosts.length ? hostHeaderValidation(settings.allowedHosts) : null;
   const mcp = createMcpNodeHandler(tools);
@@ -182,6 +234,13 @@ export function createNotesServer({ settings, options, tools }) {
           return;
         }
         await mcp.nodeHandler(req, res);
+        return;
+      }
+
+      // The settings page. Not offered over MCP: token secrets should not pass through an assistant.
+      const settingsResult = await handleSettings(req, url, proxmox);
+      if (settingsResult) {
+        sendJson(res, settingsResult.status ?? 200, settingsResult.body);
         return;
       }
 

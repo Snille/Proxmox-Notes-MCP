@@ -2,7 +2,7 @@
 
 A self-hosted service that creates, reads and edits the Notes (description) of Proxmox LXC containers and VMs. It has a web GUI, a REST API and an MCP server, and it replaces the browser-only [Proxmox Notes Generator](https://github.com/Snille/Proxmox-Notes).
 
-Status: **0.6.0, early development.** The Notes format, the server (REST, MCP, Docker), reading and writing Notes in Proxmox, and the web GUI work. The settings page and icon generation are not built yet.
+Status: **0.7.0, early development.** The Notes format, the server (REST, MCP, Docker), reading and writing Notes in Proxmox, the web GUI and its settings page work, in English and Swedish. Icon generation is not built yet.
 
 ## What it will do
 
@@ -58,7 +58,9 @@ A write takes two steps. `notes_prepare_write` reads the guest's config and retu
 
 Snapshots are never deleted automatically. **History** in the web GUI (or `notes_snapshots` and `notes_snapshot`) lists them; loading one puts it in the editor, and saving writes it back.
 
-Then list the host in `/data/targets.json` (see [targets.example.json](targets.example.json)):
+Then add the host under **Settings → Proxmox hosts** in the web GUI: address, token id and token secret. **Read the certificate** shows the host's certificate fingerprint; compare it with `pvenode cert info` on the host and pin it. **Test connection** shows the Proxmox version, how many guests the token sees, and whether it may write Notes. The secret is sent to the server once and never shown again.
+
+The hosts are kept in `/data/targets.json`, which the settings page writes with mode 600. Secrets typed in the web GUI are stored in that file, so back the volume up as carefully as the tokens themselves. A host can also be written there by hand (see [targets.example.json](targets.example.json)), with the secret in a separate file such as a Docker secret:
 
 | Field | Meaning |
 |-------|---------|
@@ -83,6 +85,9 @@ The guests' facts come from their config: hostname, IP (static, or the DHCP addr
 - **From Proxmox**: one button updates IP, MAC, DHCP and OS from the guest's config. When the IP changes, service links that pointed at the old IP move along. An exact OS release in the Note ("Debian 13") is kept when Proxmox only knows the family ("Debian").
 - **Import and export**: export a Note as JSON; import JSON from this tool or from the old Notes Generator, or Markdown. **Copy Markdown** puts the text on the clipboard for the Proxmox Notes field.
 - **Save to Proxmox**: a dialog shows the Notes now in Proxmox and the Notes that will be written, side by side, before anything is written. **History** lists the snapshots kept before each save.
+- **Settings**: Proxmox hosts (add, edit, remove, read and pin the certificate, test the connection); Notes defaults (layout, heading icon, the template for a new Note with default values such as the owner, OS names); icons (icon-set address and size, image list, heading icons, import of the old `select.json`); appearance (theme and language for this browser, and the defaults for every browser).
+- **Languages**: English and Swedish. A missing Swedish text falls back to English; a test checks that both languages have every text the page uses.
+- **Themes**: dark (default), light, or follow the system.
 
 The browser loads the Notes format modules from `/format/`, so the preview matches what the server renders. Font Awesome 4.7 is bundled (font: SIL OFL 1.1, CSS: MIT; see `src/web/vendor/font-awesome/LICENSE.txt`), because Proxmox uses that version for the icons in Notes.
 
@@ -120,7 +125,9 @@ The service has no login of its own. Never expose it without a reverse proxy tha
 
 ### Options
 
-The choices in the forms (layout, heading icons, icon-set images, OS names and the template for a new Note) are kept in `/data/options.json`. On the first start, a `select.json` from the old Notes Generator in `/data` is converted automatically. Read and save them with `GET` and `PUT /api/options`.
+The choices in the forms (layout, heading icons, icon-set images, OS names, the template for a new Note, and the default theme and language) are kept in `/data/options.json` and edited on the settings page. On the first start, a `select.json` from the old Notes Generator in `/data` is converted automatically; the settings page can also import one. Read and save them with `GET` and `PUT /api/options`; a save is checked against a schema.
+
+The host settings (`/api/settings/...`) are offered in the web GUI and REST only, not over MCP, so token secrets never pass through an assistant.
 
 ### Interfaces
 
@@ -168,7 +175,7 @@ npm run check
 2. ✅ Server: Docker image, configuration, REST API, MCP (HTTP and stdio).
 3. ✅ Proxmox: list guests on several hosts, read Notes, prefill from facts, write with preview, digest check and snapshot.
 4. ✅ Web GUI: guest list, editor with live preview, icons, JSON export and import, save to Proxmox, history.
-5. Settings page in the web GUI: Proxmox hosts (add, test, remove; token secrets are written but never shown again), layout, theme (dark, light, follow the system), language (English, Swedish), image generator (ComfyUI URL and workflow, or a cloud service and its key), and the form options and template (replaces `select.json`).
+5. ✅ Settings page in the web GUI: Proxmox hosts, Notes defaults and template, icons, theme and language. The image generator settings come with icon generation (step 7).
 6. Icons: icon library, embed from file or URL, dashboard-icons.
 7. Icon generation: ComfyUI first, then the cloud services one at a time.
 8. Release: licence, container image built by GitHub Actions, ready-made Portainer stack.

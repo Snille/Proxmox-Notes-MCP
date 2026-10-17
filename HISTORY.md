@@ -1,5 +1,13 @@
 # History
 
+## 0.7.0 - 2026-10-17
+
+- A settings page in the web GUI, which replaces editing `targets.json` and `select.json` by hand.
+- Proxmox hosts: add, edit and remove. **Read the certificate** shows the host certificate (subject, issuer, expiry, SHA-256 fingerprint) without trusting it, to compare with `pvenode cert info` and pin. **Test connection** checks the address and token before saving and reports the Proxmox version, the number of guests and, from `/access/permissions`, whether the token may write Notes. A token secret is sent once, stored in `targets.json` (mode 600, replaced atomically) and never returned; an update with an empty secret keeps the stored one. Changes take effect at once, without a restart. These endpoints are web and REST only, not MCP.
+- Notes defaults and template (default values such as the owner), OS names, icon set, image list and heading icons, with import of the old `select.json`. `PUT /api/options` now checks the options against a schema instead of storing any JSON.
+- Theme (dark, light, follow the system) and language (English, Swedish), per browser, with defaults for every browser in the options. All interface texts are in `src/web/i18n.js`; a test checks that the page and the code use no text that is missing, and that both languages have the same texts.
+- The help on the settings page lists the `pveum` commands for a new host in the right order (the token must exist before its ACL).
+
 ## 0.6.0 - 2026-10-17
 
 - Write Notes to Proxmox, in two steps. `notes_prepare_write` returns the current and the new text and a single-use confirmation (10 minutes); `notes_write_confirmed` writes only with it. Before writing, the config is read again and the write stops if its `digest` changed; the digest is also sent with the write, so Proxmox itself refuses it if the config changed in between. Only `description` is sent, and the stored text is read back and compared.

@@ -1,13 +1,26 @@
 import { ProxmoxClient } from './client.mjs';
-import { loadTargets, publicTarget } from './targets.mjs';
+import { publicTarget, TargetStore } from './targets.mjs';
 
 export class Proxmox {
-  constructor(targets) {
-    this.clients = new Map(targets.map(target => [target.id, new ProxmoxClient(target)]));
+  constructor(targets = [], store = null) {
+    this.store = store;
+    this.setTargets(targets);
   }
 
   static async open(targetsFile) {
-    return new Proxmox(await loadTargets(targetsFile));
+    const store = await TargetStore.open(targetsFile);
+    return new Proxmox(await store.resolved(), store);
+  }
+
+  setTargets(targets) {
+    this.clients = new Map(targets.map(target => [target.id, new ProxmoxClient(target)]));
+  }
+
+  // After the settings page changed targets.json.
+  async reload() {
+    if (this.store) {
+      this.setTargets(await this.store.resolved());
+    }
   }
 
   hosts() {

@@ -7,8 +7,10 @@ import {
   renderNotes,
   SCHEMA
 } from '/format/index.mjs';
+import { applyTranslations, setLanguage, t } from './i18n.js';
 import { embedImage, fetchIconSetImage } from './icons.js';
 import { renderPreview } from './preview.js';
+import { initSettings, openSettings, refreshSettings } from './settings.js';
 
 const $ = id => document.getElementById(id);
 
@@ -24,7 +26,9 @@ const state = {
   layout: DEFAULT_LAYOUT,
   doc: null,
   raw: '',
-  original: null
+  original: null,
+  // A message shown above the editor, kept as a key and values so it follows a language change.
+  message: null
 };
 
 // ---------- small helpers ----------
@@ -63,14 +67,21 @@ function toast(message, kind = 'ok') {
   box.className = `toast ${kind}`;
   box.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { box.hidden = true; }, 4000);
+  toastTimer = setTimeout(() => { box.hidden = true; }, 5000);
 }
 
-function banner(message, kind = 'info') {
+// message: null, or a list of [key, values] pairs.
+function showMessage(message, kind = 'info') {
+  state.message = message ? { parts: message, kind } : null;
+  renderMessage();
+}
+
+function renderMessage() {
   const box = $('banner');
-  box.hidden = !message;
-  box.className = `banner ${kind}`;
-  box.textContent = message ?? '';
+  box.hidden = !state.message;
+  if (!state.message) return;
+  box.className = `banner ${state.message.kind}`;
+  box.textContent = state.message.parts.map(([key, values]) => t(key, values)).join(' ');
 }
 
 function download(name, content, type) {
@@ -82,10 +93,47 @@ function download(name, content, type) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-const LAYOUT_NAMES = { table: 'full-width table', markdown: 'Markdown (old generator)' };
-
+const kind = type => (type === 'lxc' ? 'CT' : 'VM');
 const slug = value => String(value ?? '').trim().replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'note';
 const clone = value => structuredClone(value);
+
+// ---------- preferences: theme and language ----------
+
+function getPreference(name) {
+  try { return localStorage.getItem(`proxmox-notes.${name}`) ?? ''; } catch { return ''; }
+}
+
+function setPreference(name, value) {
+  try {
+    if (value) localStorage.setItem(`proxmox-notes.${name}`, value);
+    else localStorage.removeItem(`proxmox-notes.${name}`);
+  } catch { /* storage may be blocked */ }
+  applyAppearance();
+}
+
+function applyAppearance() {
+  const defaults = state.options?.appearance ?? { theme: 'system', language: 'en' };
+  document.documentElement.dataset.theme = getPreference('theme') || defaults.theme;
+  setLanguage(getPreference('language') || defaults.language);
+  refreshTexts();
+}
+
+// Everything built in code that shows text.
+function refreshTexts() {
+  $('btnSettingsText').textContent = $('settingsView').hidden ? t('settings') : t('settings.back');
+  fillLayoutChoice();
+  fillIconKeys();
+  renderMessage();
+  if (state.doc || state.mode === 'raw') {
+    if (state.mode === 'form') renderSections();
+    renderFacts();
+    renderContext();
+    renderOutput();
+  }
+  renderHostSelect();
+  renderGuests();
+  refreshSettings();
+}
 
 // ---------- documents ----------
 
@@ -121,17 +169,17 @@ function loadDocument(doc, { source = state.source, facts = state.facts, origina
   state.source = source;
   state.facts = facts;
   state.original = original;
-  banner(message, 'info');
+  showMessage(message, 'info');
   renderEditor();
 }
 
-function loadRaw(markdown, { source = state.source, facts = state.facts, original = markdown, message } = {}) {
+function loadRaw(markdown, { source = state.source, facts = state.facts, original = markdown, message = null } = {}) {
   state.mode = 'raw';
   state.raw = markdown;
   state.source = source;
   state.facts = facts;
   state.original = original;
-  banner(message, 'warn');
+  showMessage(message, 'warn');
   renderEditor();
 }
 
@@ -141,20 +189,20 @@ async function openGuest(guest) {
     const source = { host: state.host, vmid: guest.vmid, name: guest.name, type: guest.type };
     if (result.empty) {
       const prefill = await api('notes_prefill', { host: state.host, vmid: guest.vmid });
-      loadDocument(prefill.doc, { source, facts: result.facts, original: '', message: 'This guest has no Notes yet. A new Note was filled in from the template and from Proxmox.' });
+      loadDocument(prefill.doc, { source, facts: result.facts, original: '', message: [['msg.prefilled']] });
     } else if (result.parsed.ok) {
-      const messages = [];
+      const message = [];
       if (result.parsed.layout !== state.layout) {
-        messages.push(`These Notes use the ${LAYOUT_NAMES[result.parsed.layout]} layout; they are written in the ${LAYOUT_NAMES[state.layout]} layout when saved.`);
+        message.push(['msg.layoutDiffers', { from: t(`layout.${result.parsed.layout}`), to: t(`layout.${state.layout}`) }]);
       }
       if (result.parsed.warnings.length) {
-        messages.push(`Read with notes: ${result.parsed.warnings.join(' ')}`);
+        message.push(['msg.warnings', { warnings: result.parsed.warnings.join(' ') }]);
       }
       // Compare against the Note as this tool writes it in its own layout, so small differences
       // in how Proxmox stored it are not a change, but a change of layout is.
-      loadDocument(result.parsed.doc, { source, facts: result.facts, original: renderNotes(result.parsed.doc, { layout: result.parsed.layout }), message: messages.join(' ') || null });
+      loadDocument(result.parsed.doc, { source, facts: result.facts, original: renderNotes(result.parsed.doc, { layout: result.parsed.layout }), message: message.length ? message : null });
     } else {
-      loadRaw(result.markdown, { source, facts: result.facts, message: `These Notes do not follow the Notes format (line ${result.parsed.line}: ${result.parsed.error}). They are shown as raw text.` });
+      loadRaw(result.markdown, { source, facts: result.facts, message: [['msg.notFormat', { line: result.parsed.line, error: result.parsed.error }]] });
     }
     markActiveGuest();
   } catch (error) {
@@ -204,7 +252,7 @@ function renderSections() {
     const rows = el('div', { class: 'rows' });
     section.rows.forEach((row, rowIndex) => rows.append(renderRow(section, row, rowIndex)));
     const isServices = section.id === 'services';
-    const addField = el('button', { type: 'button', class: 'small', text: isServices ? '+ Link' : '+ Row', onclick: () => {
+    const addField = el('button', { type: 'button', class: 'small', text: isServices ? t('addLink') : t('addRow'), onclick: () => {
       section.rows.push(isServices ? { type: 'link', name: '', url: 'https://' } : { type: 'field', key: '', value: '' });
       renderSections();
       update();
@@ -218,8 +266,8 @@ function renderSections() {
 }
 
 function renderRow(section, row, index) {
-  const change = (key) => (event) => { row[key] = event.target.value; update(); };
-  const move = (delta) => () => {
+  const change = key => event => { row[key] = event.target.value; update(); };
+  const move = delta => () => {
     const target = index + delta;
     if (target < 0 || target >= section.rows.length) return;
     [section.rows[index], section.rows[target]] = [section.rows[target], section.rows[index]];
@@ -230,22 +278,22 @@ function renderRow(section, row, index) {
   let inputs;
   if (row.type === 'field') {
     inputs = [
-      el('input', { type: 'text', class: 'key', value: row.key, placeholder: 'Key', 'aria-label': 'Key', oninput: change('key') }),
-      el('input', { type: 'text', class: 'value', value: row.value, placeholder: 'Value', 'aria-label': 'Value', oninput: change('value') })
+      el('input', { type: 'text', class: 'key', value: row.key, placeholder: t('key'), 'aria-label': t('key'), oninput: change('key') }),
+      el('input', { type: 'text', class: 'value', value: row.value, placeholder: t('value'), 'aria-label': t('value'), oninput: change('value') })
     ];
   } else if (row.type === 'link') {
     inputs = [
-      el('input', { type: 'text', class: 'key', value: row.name, placeholder: 'Name', 'aria-label': 'Link name', oninput: change('name') }),
-      el('input', { type: 'text', class: 'value', value: row.url, placeholder: 'https://', 'aria-label': 'Link URL', oninput: change('url') })
+      el('input', { type: 'text', class: 'key', value: row.name, placeholder: t('linkName'), 'aria-label': t('linkName'), oninput: change('name') }),
+      el('input', { type: 'text', class: 'value', value: row.url, placeholder: 'https://', 'aria-label': t('linkUrl'), oninput: change('url') })
     ];
   } else {
-    inputs = [el('input', { type: 'text', class: 'value wide', value: row.text, placeholder: 'Text', 'aria-label': 'Text', oninput: change('text') })];
+    inputs = [el('input', { type: 'text', class: 'value wide', value: row.text, placeholder: t('textRow'), 'aria-label': t('textRow'), oninput: change('text') })];
   }
   return el('div', { class: 'row-item' }, [
     ...inputs,
-    el('button', { type: 'button', class: 'icon', title: 'Move up', onclick: move(-1) }, [el('i', { class: 'fa fa-arrow-up' })]),
-    el('button', { type: 'button', class: 'icon', title: 'Move down', onclick: move(1) }, [el('i', { class: 'fa fa-arrow-down' })]),
-    el('button', { type: 'button', class: 'icon danger', title: 'Remove row', onclick: remove }, [el('i', { class: 'fa fa-times' })])
+    el('button', { type: 'button', class: 'icon', title: t('moveUp'), onclick: move(-1) }, [el('i', { class: 'fa fa-arrow-up' })]),
+    el('button', { type: 'button', class: 'icon', title: t('moveDown'), onclick: move(1) }, [el('i', { class: 'fa fa-arrow-down' })]),
+    el('button', { type: 'button', class: 'icon danger', title: t('removeRow'), onclick: remove }, [el('i', { class: 'fa fa-times' })])
   ]);
 }
 
@@ -254,27 +302,26 @@ function renderFacts() {
   const facts = state.facts;
   box.hidden = !facts || state.mode !== 'form';
   if (box.hidden) return;
-  const parts = [
-    `Hostname ${facts.hostname || '?'}`,
-    `IP ${facts.ip || 'unknown'}`,
-    `MAC ${facts.mac || 'unknown'}`,
-    `DHCP ${facts.dhcp === null ? 'unknown' : facts.dhcp ? 'Yes' : 'No'}`,
-    `OS ${facts.os || 'unknown'}`
-  ];
-  $('factsText').textContent = parts.join(' · ');
+  $('factsText').textContent = t('facts', {
+    hostname: facts.hostname || '?',
+    ip: facts.ip || t('unknown'),
+    mac: facts.mac || t('unknown'),
+    dhcp: facts.dhcp === null ? t('unknown') : facts.dhcp ? t('yes') : t('no'),
+    os: facts.os || t('unknown')
+  });
 }
 
 function renderContext() {
   const label = $('contextLabel');
   if (state.source) {
-    label.textContent = `${state.source.host} · ${state.source.type === 'lxc' ? 'CT' : 'VM'} ${state.source.vmid} · ${state.source.name}`;
+    label.textContent = t('context.guest', { host: state.source.host, kind: kind(state.source.type), vmid: state.source.vmid, name: state.source.name });
     label.classList.remove('muted');
   } else {
-    label.textContent = 'Not linked to a guest. Export it as JSON or copy the Markdown.';
+    label.textContent = t('context.unlinked');
     label.classList.add('muted');
   }
   $('btnSave').disabled = !state.source;
-  $('btnSave').title = state.source ? `Write these Notes to ${state.source.name} (a preview comes first)` : 'Open a guest to save its Notes';
+  $('btnSave').title = state.source ? t('save.titleFor', { name: state.source.name }) : t('save.titleNone');
   $('btnHistory').hidden = !state.source;
 }
 
@@ -288,13 +335,13 @@ async function openSaveDialog() {
   try {
     const prepared = await api('notes_prepare_write', { host: state.source.host, vmid: state.source.vmid, markdown });
     if (!prepared.changed) {
-      toast('Proxmox already has exactly these Notes. Nothing to save.');
+      toast(t('save.nothing'));
       return;
     }
     pendingWrite = prepared;
-    const target = `${state.source.type === 'lxc' ? 'CT' : 'VM'} ${prepared.guest.vmid} (${prepared.guest.name}) on ${state.source.host}`;
-    $('saveSummary').textContent = `Write ${prepared.length} of ${prepared.limit} characters to ${target}.`;
-    $('saveCurrent').replaceChildren(prepared.current.trim() ? renderPreview(prepared.current) : el('p', { class: 'muted', text: '(empty)' }));
+    const target = t('save.target', { kind: kind(state.source.type), vmid: prepared.guest.vmid, name: prepared.guest.name, host: state.source.host });
+    $('saveSummary').textContent = t('save.summary', { length: prepared.length, limit: prepared.limit, target });
+    $('saveCurrent').replaceChildren(prepared.current.trim() ? renderPreview(prepared.current) : el('p', { class: 'muted', text: t('empty') }));
     $('saveNext').replaceChildren(renderPreview(prepared.next));
     $('saveConfirm').disabled = false;
     $('saveDialog').showModal();
@@ -311,9 +358,9 @@ async function confirmSave() {
     state.original = pendingWrite.next;
     pendingWrite = null;
     $('saveDialog').close();
-    banner(null);
+    showMessage(null);
     update();
-    toast(`Saved to ${state.source.name}. The previous Notes are kept as snapshot ${result.snapshot}.`);
+    toast(t('save.done', { name: state.source.name, snapshot: result.snapshot }));
     const guest = state.guests.find(g => g.vmid === result.vmid);
     if (guest && state.host === result.host) {
       guest.notes = state.mode === 'form' ? 'format' : 'other';
@@ -333,19 +380,19 @@ async function openHistory() {
   if (!state.source) return;
   const source = state.source;
   const list = $('historyList');
-  list.replaceChildren(el('li', { class: 'muted', text: 'Loading…' }));
+  list.replaceChildren(el('li', { class: 'muted', text: t('loading') }));
   $('historyDialog').showModal();
   try {
     const { snapshots } = await api('notes_snapshots', { host: source.host, vmid: source.vmid });
     list.replaceChildren();
     if (!snapshots.length) {
-      list.append(el('li', { class: 'muted', text: 'No snapshots yet. One is kept every time these Notes are saved from here.' }));
+      list.append(el('li', { class: 'muted', text: t('history.none') }));
     }
     for (const snapshot of snapshots) {
       list.append(el('li', {}, [
         el('span', { class: 'when', text: new Date(snapshot.takenAt).toLocaleString() }),
-        el('span', { class: 'muted small', text: `${snapshot.length} characters` }),
-        el('button', { type: 'button', class: 'small', text: 'Load into editor', onclick: () => loadSnapshot(source, snapshot.id) })
+        el('span', { class: 'muted small', text: t('history.chars', { count: snapshot.length }) }),
+        el('button', { type: 'button', class: 'small', text: t('history.load'), onclick: () => loadSnapshot(source, snapshot.id) })
       ]));
     }
   } catch (error) {
@@ -357,8 +404,7 @@ async function loadSnapshot(source, id) {
   try {
     const snapshot = await api('notes_snapshot', { host: source.host, vmid: source.vmid, id });
     $('historyDialog').close();
-    const when = new Date(snapshot.takenAt).toLocaleString();
-    const message = `Loaded the snapshot from ${when}. Save to put it back in Proxmox.`;
+    const message = [['history.loaded', { when: new Date(snapshot.takenAt).toLocaleString() }]];
     if (snapshot.parsed?.ok) {
       loadDocument(snapshot.parsed.doc, { original: state.original, message });
     } else {
@@ -386,7 +432,7 @@ function renderOutput() {
   const ratio = Math.min(length / PROXMOX_DESCRIPTION_LIMIT, 1);
   $('sizeFill').style.width = `${(ratio * 100).toFixed(1)}%`;
   $('sizeFill').className = length > PROXMOX_DESCRIPTION_LIMIT ? 'over' : ratio > 0.9 ? 'near' : '';
-  $('sizeText').textContent = `${length} of ${PROXMOX_DESCRIPTION_LIMIT} characters${length > PROXMOX_DESCRIPTION_LIMIT ? ' — too long for Proxmox' : ''}`;
+  $('sizeText').textContent = t('size', { length, limit: PROXMOX_DESCRIPTION_LIMIT }) + (length > PROXMOX_DESCRIPTION_LIMIT ? t('size.over') : '');
   const normalize = text => String(text ?? '').replace(/\r\n?/g, '\n').replace(/\n*$/, '\n');
   $('dirty').hidden = state.original === null || normalize(markdown) === normalize(state.original);
   renderIcon();
@@ -395,13 +441,13 @@ function renderOutput() {
 function renderIcon() {
   const thumb = $('iconThumb');
   const image = state.mode === 'form' ? state.doc?.image : null;
-  thumb.replaceChildren(image?.src ? el('img', { src: image.src, alt: 'Icon' }) : el('i', { class: 'fa fa-picture-o' }));
+  thumb.replaceChildren(image?.src ? el('img', { src: image.src, alt: t('icon') }) : el('i', { class: 'fa fa-picture-o' }));
   if (!image?.src) {
-    $('iconInfo').textContent = 'No icon.';
+    $('iconInfo').textContent = t('icon.none');
   } else if (image.src.startsWith('data:')) {
-    $('iconInfo').textContent = `Embedded, ${image.src.length} characters (${image.width}×${image.height}).`;
+    $('iconInfo').textContent = t('icon.embedded', { length: image.src.length, width: image.width, height: image.height });
   } else {
-    $('iconInfo').textContent = `Linked from ${image.src}`;
+    $('iconInfo').textContent = t('icon.linked', { src: image.src });
   }
 }
 
@@ -418,7 +464,9 @@ async function setImageFromBlob(blob, key) {
   const result = await embedImage(blob, { width, height, budget: imageBudget() });
   state.doc.image = { src: result.src, width, height, ...(key ? { key } : {}) };
   update();
-  toast(`Icon embedded as ${result.format}${result.quality ? ` (quality ${Math.round(result.quality * 100)})` : ''}, ${result.length} characters.`);
+  toast(result.quality
+    ? t('icon.doneQuality', { format: result.format, quality: Math.round(result.quality * 100), length: result.length })
+    : t('icon.done', { format: result.format, length: result.length }));
 }
 
 async function applyIconKey() {
@@ -441,12 +489,19 @@ async function applyIconKey() {
 
 function fillIconKeys() {
   const select = $('iconKey');
+  const current = select.value || state.doc?.image?.key || '';
   const images = state.options?.images ?? [];
-  select.replaceChildren(el('option', { value: '', text: images.length ? '— choose —' : '— no icon set configured —' }));
+  select.replaceChildren(el('option', { value: '', text: images.length ? t('iconKey.choose') : t('iconKey.none') }));
   for (const image of images) {
     select.append(el('option', { value: image.key, text: image.label }));
   }
+  select.value = current;
   select.disabled = !state.options?.iconSet?.baseUrl || images.length === 0;
+}
+
+function fillLayoutChoice() {
+  $('layout').replaceChildren(...LAYOUTS.map(value => el('option', { value, text: t(`layout.${value}`) })));
+  $('layout').value = state.layout;
 }
 
 // ---------- facts from Proxmox ----------
@@ -464,7 +519,7 @@ function applyFacts() {
     // Keep an exact release ("Debian 13") when Proxmox only knows the family ("Debian").
     if (row.key === 'OS' && row.value.toLowerCase().startsWith(value.toLowerCase())) continue;
     if (row.key === 'IP') oldIp = row.value;
-    changed.push(`${row.key}: ${row.value || '(empty)'} → ${value}`);
+    changed.push(`${row.key}: ${row.value || t('empty')} → ${value}`);
     row.value = value;
   }
   // Service links usually point at the old address; move them along with it.
@@ -472,13 +527,13 @@ function applyFacts() {
     for (const row of state.doc.sections.flatMap(s => s.rows)) {
       if (row.type === 'link' && row.url.includes(`//${oldIp}`)) {
         row.url = row.url.replace(`//${oldIp}`, `//${facts.ip}`);
-        changed.push(`Link ${row.name} → ${row.url}`);
+        changed.push(t('facts.link', { name: row.name, url: row.url }));
       }
     }
   }
   renderSections();
   update();
-  toast(changed.length ? `Updated: ${changed.join('; ')}` : 'Already up to date with Proxmox.');
+  toast(changed.length ? t('facts.updated', { changes: changed.join('; ') }) : t('facts.same'));
 }
 
 // ---------- guest list ----------
@@ -486,32 +541,41 @@ function applyFacts() {
 async function loadHosts() {
   const { hosts } = await api('notes_hosts');
   state.hosts = hosts;
+  if (!hosts.some(h => h.id === state.host)) {
+    const remembered = getPreference('host');
+    state.host = hosts.some(h => h.id === remembered) ? remembered : hosts[0]?.id ?? '';
+  }
+  renderHostSelect();
+  if (state.host) {
+    await loadGuests();
+  } else {
+    state.guests = [];
+    renderGuests();
+  }
+}
+
+function renderHostSelect() {
   const select = $('hostSelect');
   select.replaceChildren();
-  for (const host of hosts) {
-    select.append(el('option', { value: host.id, text: `${host.name}${host.tls === 'insecure' ? ' (TLS not checked)' : ''}` }));
+  select.disabled = !state.hosts.length;
+  for (const host of state.hosts) {
+    select.append(el('option', { value: host.id, text: host.tls === 'insecure' ? t('hosts.insecure', { name: host.name }) : host.name }));
   }
-  if (!hosts.length) {
-    select.append(el('option', { value: '', text: 'No Proxmox host configured' }));
-    select.disabled = true;
-    $('guestMessage').textContent = 'Add a host in targets.json (see the README) to read guests.';
-    return;
+  if (!state.hosts.length) {
+    select.append(el('option', { value: '', text: t('hosts.none') }));
+    $('guestMessage').textContent = t('hosts.add');
   }
-  let remembered = '';
-  try { remembered = localStorage.getItem('proxmox-notes.host') ?? ''; } catch { /* storage may be blocked */ }
-  state.host = hosts.some(h => h.id === remembered) ? remembered : hosts[0].id;
   select.value = state.host;
-  await loadGuests();
 }
 
 async function loadGuests() {
   const list = $('guestList');
-  $('guestMessage').textContent = 'Loading…';
+  $('guestMessage').textContent = t('loading');
   list.replaceChildren();
   try {
     const { guests } = await api('notes_guests', { host: state.host, notes: true });
     state.guests = guests;
-    $('guestMessage').textContent = guests.length ? '' : 'The token sees no guests on this host.';
+    $('guestMessage').textContent = guests.length ? '' : t('guests.none');
     renderGuests();
   } catch (error) {
     state.guests = [];
@@ -520,10 +584,10 @@ async function loadGuests() {
 }
 
 const NOTE_BADGES = {
-  format: { text: 'Notes', class: 'ok', title: 'Notes in the Notes format' },
-  other: { text: 'Other', class: 'warn', title: 'Notes that do not follow the format' },
-  empty: { text: 'Empty', class: 'muted', title: 'No Notes yet' },
-  error: { text: 'Error', class: 'bad', title: 'The config could not be read' }
+  format: { key: 'badge.format', class: 'ok' },
+  other: { key: 'badge.other', class: 'warn' },
+  empty: { key: 'badge.empty', class: 'muted' },
+  error: { key: 'badge.error', class: 'bad' }
 };
 
 function renderGuests() {
@@ -534,15 +598,14 @@ function renderGuests() {
     const text = `${guest.vmid} ${guest.name} ${guest.noteTitle ?? ''} ${guest.tags.join(' ')}`.toLowerCase();
     if (filter && !text.includes(filter)) continue;
     const badge = NOTE_BADGES[guest.notes] ?? null;
-    const item = el('li', {}, [
+    list.append(el('li', {}, [
       el('button', { type: 'button', class: 'guest', 'data-vmid': guest.vmid, title: guest.noteTitle || guest.name, onclick: () => openGuest(guest) }, [
         el('i', { class: `fa ${guest.type === 'lxc' ? 'fa-cube' : 'fa-desktop'} status-${guest.status}` }),
         el('span', { class: 'vmid', text: String(guest.vmid) }),
         el('span', { class: 'name', text: guest.name }),
-        badge ? el('span', { class: `badge ${badge.class}`, text: badge.text, title: badge.title }) : null
+        badge ? el('span', { class: `badge ${badge.class}`, text: t(badge.key), title: t(`${badge.key}Title`) }) : null
       ])
-    ]);
-    list.append(item);
+    ]));
   }
   markActiveGuest();
 }
@@ -563,32 +626,32 @@ async function importFile(file) {
     try {
       data = JSON.parse(text);
     } catch {
-      throw new Error('The file is not valid JSON');
+      throw new Error(t('import.badJson'));
     }
     if (data.schema === SCHEMA && Array.isArray(data.sections)) {
-      loadDocument(data, { original: state.original, message: `Imported ${file.name}.` });
+      loadDocument(data, { original: state.original, message: [['import.done', { file: file.name }]] });
       return;
     }
     if (data.h && data.sections) {
       const set = state.options?.iconSet ?? {};
       const doc = fromLegacyJson(data, { imageFqdn: set.baseUrl ?? '', imageWidth: set.width ?? 100, imageHeight: set.height ?? 100 });
-      loadDocument(doc, { original: state.original, message: `Imported ${file.name} from the old Notes Generator.` });
+      loadDocument(doc, { original: state.original, message: [['import.legacy', { file: file.name }]] });
       return;
     }
-    throw new Error('This JSON is neither a Proxmox Notes document nor a Notes Generator file');
+    throw new Error(t('import.unknown'));
   }
   const parsed = parseNotes(text);
   if (parsed.ok) {
-    loadDocument(parsed.doc, { original: state.original, message: `Imported ${file.name}.` });
+    loadDocument(parsed.doc, { original: state.original, message: [['import.done', { file: file.name }]] });
   } else {
-    loadRaw(text, { original: state.original, message: `${file.name} does not follow the Notes format (line ${parsed.line}: ${parsed.error}). It is shown as raw text.` });
+    loadRaw(text, { original: state.original, message: [['import.raw', { file: file.name, line: parsed.line, error: parsed.error }]] });
   }
 }
 
 function exportJson() {
   if (state.mode === 'raw') {
     download(`${slug(state.source?.name)}.md`, state.raw, 'text/markdown');
-    toast('Raw text exported as Markdown, because it is not in the Notes format.');
+    toast(t('export.raw'));
     return;
   }
   download(`${slug(state.doc.title)}.json`, `${JSON.stringify(state.doc, null, 2)}\n`, 'application/json');
@@ -607,7 +670,18 @@ async function copyMarkdown() {
     document.execCommand('copy');
     area.hidden = hidden;
   }
-  toast(`Markdown copied (${markdown.length} characters).`);
+  toast(t('copied', { length: markdown.length }));
+}
+
+// ---------- views ----------
+
+function toggleSettings() {
+  const opening = $('settingsView').hidden;
+  $('settingsView').hidden = !opening;
+  $('editorView').hidden = opening;
+  $('editorActions').hidden = opening;
+  $('btnSettingsText').textContent = opening ? t('settings.back') : t('settings');
+  if (opening) openSettings();
 }
 
 // ---------- wiring ----------
@@ -636,14 +710,14 @@ function bindInputs() {
 
   $('btnRawParse').addEventListener('click', () => {
     const parsed = parseNotes(state.raw);
-    if (parsed.ok) loadDocument(parsed.doc, { original: state.original, message: 'The text now follows the Notes format.' });
-    else toast(`Still not in the Notes format (line ${parsed.line}: ${parsed.error}).`, 'bad');
+    if (parsed.ok) loadDocument(parsed.doc, { original: state.original, message: [['raw.nowForm']] });
+    else toast(t('raw.still', { line: parsed.line, error: parsed.error }), 'bad');
   });
   $('btnRawTemplate').addEventListener('click', async () => {
-    if (!confirm('Replace the raw text in the editor with a new Note from the template? Proxmox is not changed.')) return;
+    if (!confirm(t('raw.confirm'))) return;
     if (state.source) {
       const prefill = await api('notes_prefill', { host: state.source.host, vmid: state.source.vmid });
-      loadDocument(prefill.doc, { original: state.original, message: 'A new Note was filled in from the template and from Proxmox.' });
+      loadDocument(prefill.doc, { original: state.original, message: [['raw.prefilled']] });
     } else {
       loadDocument(newDocument(), { original: state.original });
     }
@@ -670,6 +744,7 @@ function bindInputs() {
   $('saveCancel').addEventListener('click', () => { pendingWrite = null; $('saveDialog').close(); });
   $('btnHistory').addEventListener('click', openHistory);
   $('historyClose').addEventListener('click', () => $('historyDialog').close());
+  $('btnSettings').addEventListener('click', toggleSettings);
   $('layout').addEventListener('change', e => {
     state.layout = e.target.value;
     try { localStorage.setItem('proxmox-notes.layout', state.layout); } catch { /* storage may be blocked */ }
@@ -695,24 +770,36 @@ function bindInputs() {
   window.addEventListener('beforeunload', event => {
     if (!$('dirty').hidden) event.preventDefault();
   });
+
+  initSettings({
+    el,
+    toast,
+    getOptions: () => state.options,
+    setOptions: options => {
+      state.options = options;
+      fillIconKeys();
+      applyAppearance();
+    },
+    getPreference,
+    setPreference,
+    onHostsChanged: () => loadHosts()
+  });
 }
 
 async function start() {
+  applyTranslations(document);
   bindInputs();
   try {
     const [status, options] = await Promise.all([api('notes_status'), fetch('/api/options').then(r => r.json())]);
     $('version').textContent = `v${status.version}`;
     state.options = options;
-    let remembered = '';
-    try { remembered = localStorage.getItem('proxmox-notes.layout') ?? ''; } catch { /* storage may be blocked */ }
+    const remembered = getPreference('layout');
     state.layout = LAYOUTS.includes(remembered) ? remembered : LAYOUTS.includes(options.layout) ? options.layout : DEFAULT_LAYOUT;
-    $('layout').replaceChildren(...LAYOUTS.map(value => el('option', { value, text: LAYOUT_NAMES[value] })));
-    $('layout').value = state.layout;
-    fillIconKeys();
     loadDocument(newDocument(), { source: null, facts: null, original: null });
+    applyAppearance();
     await loadHosts();
   } catch (error) {
-    banner(`The service did not answer: ${error.message}`, 'bad');
+    showMessage([['service.down', { error: error.message }]], 'bad');
   }
 }
 

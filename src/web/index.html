@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="system">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -12,56 +12,57 @@
     <h1><i class="fa fa-sticky-note-o"></i> Proxmox Notes</h1>
     <span id="version" class="muted"></span>
     <div class="spacer"></div>
-    <div class="actions">
-      <button id="btnNew" type="button" title="Start a new Note from the template"><i class="fa fa-file-o"></i> New</button>
-      <label class="button" title="Import a Note from JSON (this tool or the old Notes Generator) or Markdown"><i class="fa fa-upload"></i> Import<input id="fileImport" type="file" accept=".json,.md,.txt,application/json,text/markdown,text/plain" hidden></label>
-      <button id="btnExport" type="button" title="Download the Note as JSON"><i class="fa fa-download"></i> Export JSON</button>
-      <button id="btnCopy" type="button" title="Copy the Markdown for the Proxmox Notes field"><i class="fa fa-clipboard"></i> Copy Markdown</button>
-      <button id="btnSave" type="button" class="primary" disabled title="Open a guest to save its Notes"><i class="fa fa-floppy-o"></i> Save to Proxmox</button>
+    <div class="actions" id="editorActions">
+      <button id="btnNew" type="button" data-i18n-title="new.title"><i class="fa fa-file-o"></i> <span data-i18n="new">New</span></button>
+      <label class="button" data-i18n-title="import.title"><i class="fa fa-upload"></i> <span data-i18n="import">Import</span><input id="fileImport" type="file" accept=".json,.md,.txt,application/json,text/markdown,text/plain" hidden></label>
+      <button id="btnExport" type="button" data-i18n-title="export.title"><i class="fa fa-download"></i> <span data-i18n="export">Export JSON</span></button>
+      <button id="btnCopy" type="button" data-i18n-title="copy.title"><i class="fa fa-clipboard"></i> <span data-i18n="copy">Copy Markdown</span></button>
+      <button id="btnSave" type="button" class="primary" disabled><i class="fa fa-floppy-o"></i> <span data-i18n="save">Save to Proxmox</span></button>
     </div>
+    <button id="btnSettings" type="button" data-i18n-title="settings.title"><i class="fa fa-cog"></i> <span id="btnSettingsText" data-i18n="settings">Settings</span></button>
   </header>
 
-  <div class="layout">
+  <div class="layout" id="editorView">
     <aside class="sidebar">
-      <label for="hostSelect" class="label">Proxmox host</label>
+      <label for="hostSelect" class="label" data-i18n="host">Proxmox host</label>
       <select id="hostSelect"></select>
       <div class="sidebar-row">
-        <input id="guestFilter" type="search" placeholder="Filter guests" aria-label="Filter guests">
-        <button id="btnReload" type="button" class="icon" title="Reload the guest list"><i class="fa fa-refresh"></i></button>
+        <input id="guestFilter" type="search" data-i18n-placeholder="filter" data-i18n-aria-label="filter">
+        <button id="btnReload" type="button" class="icon" data-i18n-title="reload"><i class="fa fa-refresh"></i></button>
       </div>
-      <ul id="guestList" class="guest-list" aria-label="Guests"></ul>
+      <ul id="guestList" class="guest-list" data-i18n-aria-label="guests"></ul>
       <p id="guestMessage" class="muted small"></p>
     </aside>
 
     <main class="workspace">
       <div id="banner" class="banner" hidden></div>
       <div class="context">
-        <span id="contextLabel" class="muted">No guest selected. Pick one on the left, or start a new Note.</span>
-        <span id="dirty" class="badge warn" hidden>Changed</span>
-        <button id="btnHistory" type="button" class="small" hidden title="Earlier versions of these Notes, kept before each save"><i class="fa fa-history"></i> History</button>
+        <span id="contextLabel" class="muted"></span>
+        <span id="dirty" class="badge warn" hidden data-i18n="changed">Changed</span>
+        <button id="btnHistory" type="button" class="small" hidden data-i18n-title="history.title"><i class="fa fa-history"></i> <span data-i18n="history">History</span></button>
       </div>
 
       <div class="columns">
-        <section class="editor" aria-label="Editor">
+        <section class="editor" data-i18n-aria-label="editor">
           <div id="formMode">
             <fieldset>
-              <legend>Heading</legend>
+              <legend data-i18n="heading">Heading</legend>
               <div class="grid-2">
-                <label class="label">Icon<select id="headerIcon"></select></label>
-                <label class="label">Title<input id="title" type="text" autocomplete="off"></label>
+                <label class="label"><span data-i18n="icon">Icon</span><select id="headerIcon"></select></label>
+                <label class="label"><span data-i18n="titleLabel">Title</span><input id="title" type="text" autocomplete="off"></label>
               </div>
             </fieldset>
 
             <fieldset>
-              <legend>Icon image</legend>
+              <legend data-i18n="iconImage">Icon image</legend>
               <div class="icon-panel">
                 <div class="icon-thumb" id="iconThumb"><i class="fa fa-picture-o"></i></div>
                 <div class="icon-controls">
-                  <label class="label">From the icon set<select id="iconKey"><option value="">—</option></select></label>
-                  <label class="check"><input id="embed" type="checkbox" checked> Embed in the Note (no web server needed)</label>
+                  <label class="label"><span data-i18n="fromIconSet">From the icon set</span><select id="iconKey"></select></label>
+                  <label class="check"><input id="embed" type="checkbox" checked> <span data-i18n="embed">Embed in the Note (no web server needed)</span></label>
                   <div class="row-buttons">
-                    <label class="button small"><i class="fa fa-image"></i> Upload image<input id="iconUpload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden></label>
-                    <button id="btnIconRemove" type="button" class="small"><i class="fa fa-times"></i> No icon</button>
+                    <label class="button small"><i class="fa fa-image"></i> <span data-i18n="upload">Upload image</span><input id="iconUpload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden></label>
+                    <button id="btnIconRemove" type="button" class="small"><i class="fa fa-times"></i> <span data-i18n="noIcon">No icon</span></button>
                   </div>
                   <p id="iconInfo" class="muted small"></p>
                 </div>
@@ -69,16 +70,16 @@
             </fieldset>
 
             <fieldset>
-              <legend>Text</legend>
-              <label class="label">Description<textarea id="description" rows="3"></textarea></label>
-              <label class="label">Notes<textarea id="notes" rows="6"></textarea></label>
-              <p class="muted small">New lines become line breaks. **bold** and &lt;b&gt; are written as &lt;strong&gt;, the only bold Proxmox shows. Other simple HTML works too.</p>
+              <legend data-i18n="text">Text</legend>
+              <label class="label"><span data-i18n="description">Description</span><textarea id="description" rows="3"></textarea></label>
+              <label class="label"><span data-i18n="notes">Notes</span><textarea id="notes" rows="6"></textarea></label>
+              <p class="muted small" data-i18n="textHelp">New lines become line breaks. **bold** and &lt;b&gt; are written as &lt;strong&gt;, the only bold Proxmox shows. Other simple HTML works too.</p>
             </fieldset>
 
             <fieldset id="factsBox" hidden>
-              <legend>From Proxmox</legend>
+              <legend data-i18n="fromProxmox">From Proxmox</legend>
               <p id="factsText" class="small"></p>
-              <button id="btnApplyFacts" type="button" class="small"><i class="fa fa-magic"></i> Update IP, MAC, DHCP and OS from Proxmox</button>
+              <button id="btnApplyFacts" type="button" class="small"><i class="fa fa-magic"></i> <span data-i18n="applyFacts">Update IP, MAC, DHCP and OS from Proxmox</span></button>
             </fieldset>
 
             <div id="sections"></div>
@@ -86,22 +87,22 @@
 
           <div id="rawMode" hidden>
             <fieldset>
-              <legend>Raw Markdown</legend>
-              <p class="small">This text does not follow the Notes format, so it cannot be shown as a form. Nothing is lost: you can edit it here as text.</p>
+              <legend data-i18n="raw">Raw Markdown</legend>
+              <p class="small" data-i18n="rawHelp">This text does not follow the Notes format, so it cannot be shown as a form. Nothing is lost: you can edit it here as text.</p>
               <textarea id="raw" rows="22" spellcheck="false"></textarea>
               <div class="row-buttons">
-                <button id="btnRawParse" type="button" class="small"><i class="fa fa-repeat"></i> Read as form again</button>
-                <button id="btnRawTemplate" type="button" class="small"><i class="fa fa-file-o"></i> Replace with a new Note from the template</button>
+                <button id="btnRawParse" type="button" class="small"><i class="fa fa-repeat"></i> <span data-i18n="rawParse">Read as form again</span></button>
+                <button id="btnRawTemplate" type="button" class="small"><i class="fa fa-file-o"></i> <span data-i18n="rawTemplate">Replace with a new Note from the template</span></button>
               </div>
             </fieldset>
           </div>
         </section>
 
-        <section class="preview-pane" aria-label="Preview">
+        <section class="preview-pane" data-i18n-aria-label="preview">
           <div class="tabs" role="tablist">
-            <button type="button" role="tab" data-tab="preview" class="active">Preview</button>
-            <button type="button" role="tab" data-tab="markdown">Markdown</button>
-            <label class="layout-choice">Layout <select id="layout" aria-label="Layout"></select></label>
+            <button type="button" role="tab" data-tab="preview" class="active" data-i18n="preview">Preview</button>
+            <button type="button" role="tab" data-tab="markdown" data-i18n="markdown">Markdown</button>
+            <label class="layout-choice"><span data-i18n="layout">Layout</span> <select id="layout"></select></label>
           </div>
           <div id="preview" class="pve-notes"></div>
           <textarea id="markdownOut" class="markdown-out" rows="24" readonly spellcheck="false" hidden></textarea>
@@ -109,38 +110,154 @@
             <div class="size-bar"><div id="sizeFill"></div></div>
             <span id="sizeText" class="small"></span>
           </div>
-          <p class="muted small">The preview follows the rules of current Proxmox versions: inline styles are removed, embedded PNG/JPEG/WebP images are shown.</p>
+          <p class="muted small" data-i18n="previewHelp">The preview follows the rules of current Proxmox versions: inline styles are removed, embedded PNG/JPEG/WebP images are shown.</p>
         </section>
       </div>
     </main>
   </div>
 
+  <div class="settings" id="settingsView" hidden>
+    <nav class="settings-tabs" role="tablist">
+      <button type="button" role="tab" data-settings-tab="hosts" class="active"><i class="fa fa-server"></i> <span data-i18n="set.hosts">Proxmox hosts</span></button>
+      <button type="button" role="tab" data-settings-tab="notes"><i class="fa fa-sticky-note-o"></i> <span data-i18n="set.notes">Notes</span></button>
+      <button type="button" role="tab" data-settings-tab="icons"><i class="fa fa-picture-o"></i> <span data-i18n="set.icons">Icons</span></button>
+      <button type="button" role="tab" data-settings-tab="appearance"><i class="fa fa-adjust"></i> <span data-i18n="set.appearance">Appearance</span></button>
+    </nav>
+
+    <section class="settings-page" data-settings-page="hosts">
+      <h2 data-i18n="set.hosts">Proxmox hosts</h2>
+      <p class="small" data-i18n="set.hostsHelp">The hosts this instance works with. Each needs an API token; the secret is stored on the server and never shown again.</p>
+      <ul id="hostList" class="host-list"></ul>
+      <div class="row-buttons"><button id="btnAddHost" type="button"><i class="fa fa-plus"></i> <span data-i18n="set.addHost">Add host</span></button></div>
+
+      <fieldset id="hostForm" hidden>
+        <legend id="hostFormTitle"></legend>
+        <div class="grid-2">
+          <label class="label"><span data-i18n="set.hostId">Id (lower case, used in tools)</span><input id="hostId" type="text" autocomplete="off" pattern="[a-z0-9-]+"></label>
+          <label class="label"><span data-i18n="set.hostName">Name</span><input id="hostName" type="text" autocomplete="off"></label>
+        </div>
+        <label class="label"><span data-i18n="set.hostUrl">Address</span><input id="hostUrl" type="text" autocomplete="off" placeholder="https://192.0.2.10:8006"></label>
+        <div class="grid-2">
+          <label class="label"><span data-i18n="set.tokenId">Token id</span><input id="hostTokenId" type="text" autocomplete="off" placeholder="proxmox-notes@pve!notes"></label>
+          <label class="label"><span data-i18n="set.tokenSecret">Token secret</span><input id="hostTokenSecret" type="password" autocomplete="new-password"></label>
+        </div>
+        <label class="label"><span data-i18n="set.fingerprint">Certificate fingerprint (SHA-256)</span><input id="hostFingerprint" type="text" autocomplete="off" spellcheck="false"></label>
+        <div class="row-buttons">
+          <button id="btnReadCert" type="button" class="small"><i class="fa fa-certificate"></i> <span data-i18n="set.readCert">Read the certificate</span></button>
+        </div>
+        <div id="certInfo" class="cert-info" hidden></div>
+        <label class="check"><input id="hostVerifyTls" type="checkbox" checked> <span data-i18n="set.verifyTls">Without a fingerprint: check the certificate against trusted CAs</span></label>
+        <p id="hostTestResult" class="small"></p>
+        <div class="row-buttons">
+          <button id="btnTestHost" type="button"><i class="fa fa-plug"></i> <span data-i18n="set.test">Test connection</span></button>
+          <button id="btnSaveHost" type="button" class="primary"><i class="fa fa-check"></i> <span data-i18n="set.saveHost">Save host</span></button>
+          <button id="btnCancelHost" type="button"><span data-i18n="cancel">Cancel</span></button>
+        </div>
+      </fieldset>
+
+      <details class="help">
+        <summary data-i18n="set.tokenHow">How to create the user and token on a Proxmox host</summary>
+        <p class="small" data-i18n="set.tokenHowText">Run this on the Proxmox host as root. "pveum user token add" shows the token secret once; paste it in the form above. "pvenode cert info" shows the fingerprint to compare with. Leave out VM.Config.Options for read-only access.</p>
+        <pre class="code">pveum role add ProxmoxNotesEditor -privs VM.Audit,VM.Config.Options
+pveum user add proxmox-notes@pve -comment 'Proxmox Notes service'
+pveum acl modify /vms -user proxmox-notes@pve -role ProxmoxNotesEditor
+pveum user token add proxmox-notes@pve notes -privsep 1 -comment 'Proxmox Notes service'
+pveum acl modify /vms -token 'proxmox-notes@pve!notes' -role ProxmoxNotesEditor
+pvenode cert info</pre>
+      </details>
+    </section>
+
+    <section class="settings-page" data-settings-page="notes" hidden>
+      <h2 data-i18n="set.notes">Notes</h2>
+      <fieldset>
+        <legend data-i18n="set.defaults">Defaults</legend>
+        <div class="grid-2">
+          <label class="label"><span data-i18n="set.defaultLayout">Layout for new and saved Notes</span><select id="optLayout"></select></label>
+          <label class="label"><span data-i18n="set.defaultIcon">Heading icon of a new Note</span><select id="optHeaderIcon"></select></label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend data-i18n="set.template">Template for a new Note</legend>
+        <p class="small" data-i18n="set.templateHelp">The rows every new Note starts with, and their default values (for example your name as Owner). IP, MAC, DHCP and OS are filled in from Proxmox.</p>
+        <div id="templateSections"></div>
+      </fieldset>
+      <fieldset>
+        <legend data-i18n="set.osNames">OS names</legend>
+        <label class="label"><span data-i18n="set.oneLine">One per line</span><textarea id="optOsNames" rows="6"></textarea></label>
+      </fieldset>
+      <div class="row-buttons"><button type="button" class="primary save-options"><i class="fa fa-check"></i> <span data-i18n="set.save">Save settings</span></button></div>
+    </section>
+
+    <section class="settings-page" data-settings-page="icons" hidden>
+      <h2 data-i18n="set.icons">Icons</h2>
+      <fieldset>
+        <legend data-i18n="set.iconSet">Icon set on a web server (optional)</legend>
+        <p class="small" data-i18n="set.iconSetHelp">Images are found at address/key + width x height + extension, for example …/sonarr01-100x100.png. Embedded icons are drawn at this size too.</p>
+        <label class="label"><span data-i18n="set.iconBase">Address</span><input id="optIconBase" type="text" autocomplete="off" placeholder="https://icons.example.com/blue/100x100"></label>
+        <div class="grid-3">
+          <label class="label"><span data-i18n="set.width">Width</span><input id="optIconWidth" type="number" min="16" max="512"></label>
+          <label class="label"><span data-i18n="set.height">Height</span><input id="optIconHeight" type="number" min="16" max="512"></label>
+          <label class="label"><span data-i18n="set.extension">Extension</span><input id="optIconExt" type="text"></label>
+        </div>
+        <label class="label"><span data-i18n="set.images">Images: one per line, "Label = key"</span><textarea id="optImages" rows="8" spellcheck="false"></textarea></label>
+      </fieldset>
+      <fieldset>
+        <legend data-i18n="set.headerIcons">Heading icons</legend>
+        <label class="label"><span data-i18n="set.headerIconsHelp">One per line, "Label = Font Awesome 4 class"</span><textarea id="optHeaderIcons" rows="8" spellcheck="false"></textarea></label>
+        <div id="headerIconPreview" class="icon-preview"></div>
+      </fieldset>
+      <div class="row-buttons">
+        <label class="button"><i class="fa fa-upload"></i> <span data-i18n="set.importSelect">Import select.json from the old Notes Generator</span><input id="importSelect" type="file" accept=".json,application/json" hidden></label>
+        <button type="button" class="primary save-options"><i class="fa fa-check"></i> <span data-i18n="set.save">Save settings</span></button>
+      </div>
+    </section>
+
+    <section class="settings-page" data-settings-page="appearance" hidden>
+      <h2 data-i18n="set.appearance">Appearance</h2>
+      <fieldset>
+        <legend data-i18n="set.thisBrowser">This browser</legend>
+        <div class="grid-2">
+          <label class="label"><span data-i18n="set.theme">Theme</span><select id="myTheme"></select></label>
+          <label class="label"><span data-i18n="set.language">Language</span><select id="myLanguage"></select></label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend data-i18n="set.everyone">Default for every browser</legend>
+        <div class="grid-2">
+          <label class="label"><span data-i18n="set.theme">Theme</span><select id="optTheme"></select></label>
+          <label class="label"><span data-i18n="set.language">Language</span><select id="optLanguage"></select></label>
+        </div>
+        <div class="row-buttons"><button type="button" class="primary save-options"><i class="fa fa-check"></i> <span data-i18n="set.save">Save settings</span></button></div>
+      </fieldset>
+    </section>
+  </div>
+
   <dialog id="saveDialog" class="dialog" aria-labelledby="saveTitle">
-    <h2 id="saveTitle"><i class="fa fa-floppy-o"></i> Save to Proxmox</h2>
+    <h2 id="saveTitle"><i class="fa fa-floppy-o"></i> <span data-i18n="save">Save to Proxmox</span></h2>
     <p id="saveSummary"></p>
     <div class="compare">
       <section>
-        <h3>Now in Proxmox</h3>
+        <h3 data-i18n="saveNow">Now in Proxmox</h3>
         <div id="saveCurrent" class="pve-notes"></div>
       </section>
       <section>
-        <h3>Will be written</h3>
+        <h3 data-i18n="saveNext">Will be written</h3>
         <div id="saveNext" class="pve-notes"></div>
       </section>
     </div>
-    <p class="muted small">The current Notes are kept as a snapshot before anything is written (see History). If the guest changes in Proxmox before you confirm, nothing is written.</p>
+    <p class="muted small" data-i18n="saveHelp">The current Notes are kept as a snapshot before anything is written (see History). If the guest changes in Proxmox before you confirm, nothing is written.</p>
     <div class="row-buttons end">
-      <button id="saveCancel" type="button">Cancel</button>
-      <button id="saveConfirm" type="button" class="primary"><i class="fa fa-check"></i> Write to Proxmox</button>
+      <button id="saveCancel" type="button" data-i18n="cancel">Cancel</button>
+      <button id="saveConfirm" type="button" class="primary"><i class="fa fa-check"></i> <span data-i18n="saveConfirm">Write to Proxmox</span></button>
     </div>
   </dialog>
 
   <dialog id="historyDialog" class="dialog narrow" aria-labelledby="historyTitle">
-    <h2 id="historyTitle"><i class="fa fa-history"></i> History</h2>
-    <p class="small">The Notes as they were just before each save. Loading one puts it in the editor; it is only written when you save.</p>
+    <h2 id="historyTitle"><i class="fa fa-history"></i> <span data-i18n="history">History</span></h2>
+    <p class="small" data-i18n="historyHelp">The Notes as they were just before each save. Loading one puts it in the editor; it is only written when you save.</p>
     <ul id="historyList" class="history-list"></ul>
     <div class="row-buttons end">
-      <button id="historyClose" type="button">Close</button>
+      <button id="historyClose" type="button" data-i18n="close">Close</button>
     </div>
   </dialog>
 

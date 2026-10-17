@@ -1,3 +1,5 @@
+import { isIP } from 'node:net';
+import tls from 'node:tls';
 import { Agent, buildConnector } from 'undici';
 import { normalizeFingerprint } from './targets.mjs';
 
@@ -122,5 +124,55 @@ export class ProxmoxClient {
     } catch {
       return null;
     }
+  }
+}
+
+// Reads the certificate a host presents, without trusting it, so the settings page can show the
+// fingerprint for the user to compare with `pvenode cert info` before pinning it.
+export function fetchCertificate(baseUrl) {
+  const url = new URL(baseUrl);
+  if (url.protocol !== 'https:') {
+    return Promise.reject(Object.assign(new Error('The address must use https://'), { statusCode: 400 }));
+  }
+  const host = url.hostname.replace(/^\[|\]$/g, '');
+  const port = Number(url.port || 443);
+  return new Promise((resolve, reject) => {
+    const socket = tls.connect({ host, port, servername: isIP(host) ? undefined : host, rejectUnauthorized: false, timeout: 8000 }, () => {
+      const cert = socket.getPeerCertificate();
+      socket.end();
+      if (!cert?.fingerprint256) {
+        reject(Object.assign(new Error('The host presented no certificate'), { statusCode: 502 }));
+        return;
+      }
+      resolve({
+        fingerprint: cert.fingerprint256,
+        subject: cert.subject?.CN ?? '',
+        issuer: cert.issuer?.CN ?? cert.issuer?.O ?? '',
+        validTo: cert.valid_to,
+        altNames: cert.subjectaltname ?? ''
+      });
+    });
+    socket.on('timeout', () => socket.destroy(Object.assign(new Error(`No answer from ${host}:${port}`), { statusCode: 502 })));
+    socket.on('error', error => reject(Object.assign(new Error(`Cannot reach ${host}:${port}: ${error.message}`), { statusCode: 502 })));
+  });
+}
+
+// Checks a target before it is saved: reachability, the token, and what the token may do.
+export async function testTarget(target) {
+  const client = new ProxmoxClient(target);
+  try {
+    const version = await client.get('/version');
+    const guests = await client.guests();
+    let canWrite = null;
+    try {
+      const permissions = await client.get('/access/permissions', { path: '/vms' });
+      const vms = permissions?.['/vms'] ?? {};
+      canWrite = Boolean(vms['VM.Config.Options']);
+    } catch {
+      // Older versions or a missing privilege: leave it unknown.
+    }
+    return { ok: true, version: version?.version ?? '', guests: guests.length, canWrite };
+  } finally {
+    await client.dispatcher.close().catch(() => {});
   }
 }
