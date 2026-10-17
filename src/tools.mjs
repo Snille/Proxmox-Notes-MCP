@@ -1,6 +1,7 @@
 import * as z from 'zod';
 import { fromLegacyJson, parseNotes, PROXMOX_DESCRIPTION_LIMIT, renderNotes, SCHEMA } from './format/index.mjs';
 import { iconSetUrl, newDocument } from './options.mjs';
+import { applyFacts, guestFacts } from './proxmox/facts.mjs';
 import { version } from './version.mjs';
 
 const rowSchema = z.discriminatedUnion('type', [
@@ -43,7 +44,18 @@ function rendered(doc) {
   };
 }
 
-export function buildTools({ options }) {
+const hostSchema = z.string().describe('Proxmox host id from notes_hosts');
+const vmidSchema = z.coerce.number().int().positive().describe('Guest id (VMID)');
+
+async function readGuest(proxmox, host, vmid) {
+  const client = proxmox.client(host);
+  const guest = await client.guest(vmid);
+  const config = await client.config(guest);
+  const facts = guestFacts(guest, config, await client.lxcInterfaces(guest));
+  return { guest, config, facts };
+}
+
+export function buildTools({ options, proxmox }) {
   return [
     {
       name: 'notes_status',
@@ -55,6 +67,7 @@ export function buildTools({ options }) {
         service: 'proxmox-notes',
         version,
         optionsSource: options.source,
+        proxmoxHosts: proxmox.hosts().length,
         transports: { mcp: '/mcp', rest: '/api/tools/{name}' }
       })
     },
@@ -84,6 +97,52 @@ export function buildTools({ options }) {
         }
         const image = src ? { src, width: current.iconSet.width, height: current.iconSet.height, key: imageKey } : null;
         return { doc: newDocument(current, { title, headerIcon, image }) };
+      }
+    },
+    {
+      name: 'notes_hosts',
+      title: 'Proxmox hosts',
+      description: 'List the Proxmox hosts this instance manages. Token secrets are never shown.',
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({}).strict(),
+      handler: async () => ({ hosts: proxmox.hosts() })
+    },
+    {
+      name: 'notes_guests',
+      title: 'Guests on a host',
+      description: 'List the LXC containers and VMs on one Proxmox host that the token can see.',
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      inputSchema: z.object({ host: hostSchema }).strict(),
+      handler: async ({ host }) => ({ host, guests: await proxmox.client(host).guests() })
+    },
+    {
+      name: 'notes_read',
+      title: "Read a guest's Note",
+      description: 'Read the current Notes of one guest: the Markdown, the parsed document (or why it does not follow the format), and the facts Proxmox knows (hostname, IP, MAC, DHCP, OS).',
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      inputSchema: z.object({ host: hostSchema, vmid: vmidSchema }).strict(),
+      handler: async ({ host, vmid }) => {
+        const { guest, config, facts } = await readGuest(proxmox, host, vmid);
+        const markdown = config.description ?? '';
+        return { host, guest, facts, markdown, empty: markdown.trim() === '', parsed: markdown.trim() ? parseNotes(markdown) : null };
+      }
+    },
+    {
+      name: 'notes_prefill',
+      title: 'New Note from a guest',
+      description: 'Create a new Note document for one guest from the instance template, filled with what Proxmox knows (title, IP, MAC, DHCP, OS, and today as the date). Nothing is written to Proxmox.',
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      inputSchema: z.object({ host: hostSchema, vmid: vmidSchema }).strict(),
+      handler: async ({ host, vmid }) => {
+        const { guest, facts } = await readGuest(proxmox, host, vmid);
+        const doc = applyFacts(newDocument(options.get()), facts);
+        const today = new Date().toISOString().slice(0, 10);
+        for (const row of doc.sections.flatMap(s => s.rows)) {
+          if (row.type === 'field' && row.key === 'Date' && !row.value) {
+            row.value = today;
+          }
+        }
+        return { host, guest, facts, doc };
       }
     },
     {

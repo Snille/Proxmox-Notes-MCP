@@ -1,12 +1,14 @@
 import { loadSettings } from './config.mjs';
 import { OptionsStore } from './options.mjs';
+import { Proxmox } from './proxmox/index.mjs';
 import { createNotesServer } from './server.mjs';
 import { buildTools } from './tools.mjs';
 import { version } from './version.mjs';
 
 const settings = loadSettings();
 const options = await OptionsStore.open(settings.dataDir);
-const tools = buildTools({ options });
+const proxmox = await Proxmox.open(settings.targetsFile);
+const tools = buildTools({ options, proxmox });
 const server = createNotesServer({ settings, options, tools });
 
 server.listen(settings.port, settings.host, () => {
@@ -16,6 +18,7 @@ server.listen(settings.port, settings.host, () => {
     version,
     port: settings.port,
     optionsSource: options.source,
+    proxmoxHosts: proxmox.hosts().map(h => `${h.id} (${h.tls})`),
     mcpToken: settings.mcpToken ? 'set' : 'not set',
     allowedHosts: settings.allowedHosts
   }));

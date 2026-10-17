@@ -1,4 +1,6 @@
 # Local development build: docker compose -f compose.dev.yaml up -d --build
+# DEV_DATA_DIR holds options.json and targets.json; DEV_SECRETS_DIR holds the token files
+# that targets.json points to under /run/secrets/proxmox-notes. Both default to private/ (ignored by git).
 services:
   proxmox-notes:
     build: .
@@ -7,7 +9,5 @@ services:
     ports:
       - "8085:8080"
     volumes:
-      - proxmox-notes-dev-data:/data
-
-volumes:
-  proxmox-notes-dev-data:
+      - ${DEV_DATA_DIR:-./private/dev-data}:/data
+      - ${DEV_SECRETS_DIR:-./private/secrets}:/run/secrets/proxmox-notes:ro

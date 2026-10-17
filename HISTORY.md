@@ -1,5 +1,12 @@
 # History
 
+## 0.3.0 - 2026-10-17
+
+- Read from Proxmox. Hosts are listed in `/data/targets.json` with an API token per host; the secret is read from a file (`tokenSecretFile`, for example a Docker secret) and is kept out of every response and log. Four read-only tools: `notes_hosts`, `notes_guests`, `notes_read` (Markdown, parsed document and facts) and `notes_prefill` (a new Note from the template, filled with hostname, IP, MAC, DHCP, OS and today's date).
+- Certificate pinning: a target can carry the SHA-256 fingerprint of the host's certificate, and the service then accepts only that certificate, checked before any request byte is sent. Proxmox uses its own CA, so without a pin the choice is between installing that CA and not checking at all.
+- Trap found while testing: on a reused TLS session Node reports no peer certificate, so the second request to a host failed the pin check. Pinned connections now always make a full handshake (`maxCachedSessions: 0`).
+- The minimal role is `VM.Audit` on `/vms`, for both the user and the token (the token has privilege separation). Tested against a real host with two guests, one LXC and one VM: both existing Notes were read, parsed, and rendered back to the identical text apart from the added `width`/`height`.
+
 ## 0.2.0 - 2026-10-17
 
 - The server: one Node.js process with a web page, REST (`POST /api/tools/{name}`), MCP over Streamable HTTP (`/mcp`) and MCP over stdio (`node src/stdio.mjs`). REST and MCP share one set of tools: `notes_status`, `notes_options`, `notes_new`, `notes_render`, `notes_parse`, `notes_import_legacy`. None of them write to Proxmox yet.

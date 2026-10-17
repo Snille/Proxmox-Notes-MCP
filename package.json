@@ -1,6 +1,6 @@
 {
   "name": "proxmox-notes",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Self-hosted web GUI, REST API and MCP server that creates, reads and edits Proxmox guest Notes.",
@@ -21,6 +21,7 @@
   "dependencies": {
     "@modelcontextprotocol/node": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",
+    "undici": "7.29.0",
     "zod": "4.5.4"
   }
 }
