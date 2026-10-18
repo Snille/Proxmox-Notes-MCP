@@ -191,7 +191,8 @@ To release a version:
 
 1. Set the version in `package.json` (the only place it is kept) and run `npm install --package-lock-only`.
 2. Add a section `## <version> - <date>` at the top of [HISTORY.md](HISTORY.md).
-3. Commit, tag `v<version>` and push with `git push --follow-tags`.
+3. Commit and push `main` (`git push origin main`), and wait for its tests to pass.
+4. Tag `v<version>` and push the tag on its own (`git push origin v<version>`). When the commit and the tag went up in one push (`git push --follow-tags`), GitHub started only the run for `main`, so no image and no release were made.
 
 The workflow checks that the tag matches `package.json`, runs the tests, builds and pushes the image, and creates the GitHub release with the text from HISTORY.md.
 
