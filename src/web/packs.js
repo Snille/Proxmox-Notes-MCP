@@ -25,6 +25,9 @@ export function openExportDialog({ el, toast, icons }) {
   exporting = { el, toast, icons };
   $('packName').value = 'proxmox-notes-icons';
   $('packError').textContent = '';
+  // Every download starts with the sizes of an icon set, without the original.
+  for (const size of PACK_SIZES) $(`packSize${size}`).checked = true;
+  $('packOriginal').checked = false;
   $('packList').replaceChildren(...icons.map(icon => el('li', { class: 'pack-row' }, [
     el('img', { src: `/api/icons/${encodeURIComponent(icon.id)}.webp`, alt: '' }),
     el('span', { class: 'pack-label', text: icon.label }),
