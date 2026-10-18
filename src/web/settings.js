@@ -3,6 +3,7 @@
 import { LAYOUTS } from '/format/index.mjs';
 import { LANGUAGES, t } from './i18n.js';
 import { addIcon, fontAwesomeNames, labelFromFile, listIcons, matches, openIconDialog, removeIcon, renameIcon, renderGrid } from './library.js';
+import { importPack, openExportDialog } from './packs.js';
 
 const $ = id => document.getElementById(id);
 
@@ -61,6 +62,30 @@ export function initSettings(context) {
     await loadLibrary();
   });
   $('btnImportSet').addEventListener('click', importIconSet);
+  $('btnSelectShown').addEventListener('click', () => {
+    for (const icon of library.filter(item => matches(item, $('librarySearch').value.trim()))) selection.add(icon.id);
+    renderLibrary();
+  });
+  $('btnSelectNone').addEventListener('click', () => { selection.clear(); renderLibrary(); });
+  $('btnExportPack').addEventListener('click', () => {
+    openExportDialog({ el: ctx.el, toast: ctx.toast, icons: library.filter(icon => selection.has(icon.id)) });
+  });
+  $('libraryZip').addEventListener('change', async event => {
+    const file = event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      const result = await importPack({
+        file, images: draft.images, size: iconSize(), replace: $('libraryReplace').checked,
+        progress: text => { $('libraryProgress').textContent = text; }, toast: ctx.toast
+      });
+      ctx.toast(result.found ? t('lib.uploadedReplaced', { added: result.added, replaced: result.replaced }) : t('pack.empty'), result.found ? 'ok' : 'bad');
+    } catch (error) {
+      $('libraryProgress').textContent = '';
+      ctx.toast(error.message, 'bad');
+    }
+    await loadLibrary();
+  });
   $('btnAddHeaderIcon').addEventListener('click', openFaDialog);
   $('faSearch').addEventListener('input', renderFaGrid);
   $('faClose').addEventListener('click', () => $('faDialog').close());
@@ -417,6 +442,14 @@ async function renderFaGrid() {
 // ---------- icon library ----------
 
 let library = [];
+// Icons chosen for a download as a pack; kept while the list is filtered.
+const selection = new Set();
+
+function updateExportButton() {
+  for (const id of selection) if (!library.some(icon => icon.id === id)) selection.delete(id);
+  $('btnExportPack').disabled = selection.size === 0;
+  $('exportPackLabel').textContent = selection.size ? t('pack.downloadCount', { count: selection.size }) : t('pack.download');
+}
 
 const iconSize = () => ({
   width: Number($('optIconWidth').value) || draft?.iconSet.width || 100,
@@ -436,8 +469,11 @@ function renderLibrary() {
   const filter = $('librarySearch').value.trim();
   const shown = library.filter(icon => matches(icon, filter));
   $('libraryCount').textContent = t('lib.count', { shown: shown.length, total: library.length });
+  updateExportButton();
   renderGrid($('libraryGrid'), shown, {
     el: ctx.el,
+    selection,
+    onSelect: updateExportButton,
     emptyText: library.length ? t('lib.noMatch') : t('lib.empty'),
     onRename: async (icon, label) => {
       try {

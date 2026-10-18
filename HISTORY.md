@@ -1,5 +1,12 @@
 # History
 
+## 0.11.0 - 2026-10-18
+
+- Icon packs. In Settings → Icons every icon has a check box; **Select the shown** ticks all icons the search shows, and **Download as ZIP** opens a dialog with the pack name, the sizes (512, 200 and 100 px, and the original) and a file name (key) per icon, prefilled from the name ("Prowlarr" becomes `prowlarr01`). The ZIP has `<size>/<key>-<size>.png`, the layout of a web icon set, so it can be unpacked into an existing set (for example the blue one on the web server), and `proxmox-notes-icons.json` with the names and the AI data. Two icons with the same key, a bad key or no size are refused before anything is drawn.
+- **Upload ZIP** adds a pack: with its manifest the names and AI data come along; any other ZIP of images is named from the file names like a folder upload, keeping the largest size of each key. **Replace icons with the same name** applies here too. AI originals have their transparent border trimmed again when the icon is drawn.
+- A small ZIP reader and writer in the browser (`zip.js`): stored and deflated entries, UTF-8 names, CRC checks, and limits of 5000 files and 500 MB. The server needed no change.
+- Tested in the browser: three Prowlarr icons downloaded with and without originals and uploaded again with their names and AI data.
+
 ## 0.10.0 - 2026-10-18
 
 - Icons can be created with ComfyUI. **Choose icon** has a tab **Create with AI**, and Settings → Icons a button for it: give a name and what the icon shows, tick styles and choose how many images (1 to 4). The server sends the work to ComfyUI, follows it (queued, drawing) and fetches the images; clicking one trims its transparent border, draws the icon and adds it to the library with the original, the prompt, the styles and the seed.

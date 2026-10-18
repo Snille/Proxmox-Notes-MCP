@@ -204,6 +204,12 @@ pvenode cert info</pre>
           <button id="btnGenerateIcons" type="button"><i class="fa fa-magic"></i> <span data-i18n="gen.tab">Create with AI</span></button>
         </div>
         <div class="library-toolbar">
+          <button id="btnSelectShown" type="button" class="small"><i class="fa fa-check-square-o"></i> <span data-i18n="pack.selectShown">Select the shown</span></button>
+          <button id="btnSelectNone" type="button" class="small"><i class="fa fa-square-o"></i> <span data-i18n="pack.selectNone">Clear selection</span></button>
+          <button id="btnExportPack" type="button" class="small" disabled><i class="fa fa-file-archive-o"></i> <span id="exportPackLabel" data-i18n="pack.download">Download as ZIP</span></button>
+          <label class="button small"><i class="fa fa-upload"></i> <span data-i18n="pack.upload">Upload ZIP</span><input id="libraryZip" type="file" accept=".zip,application/zip" hidden></label>
+        </div>
+        <div class="library-toolbar">
           <label class="check"><input id="libraryReplace" type="checkbox" checked> <span data-i18n="lib.replace">Replace icons with the same name (for example when importing a set again)</span></label>
           <span id="libraryProgress" class="small"></span>
         </div>
@@ -392,6 +398,27 @@ pvenode cert info</pre>
     <div class="row-buttons end">
       <button id="saveCancel" type="button" data-i18n="cancel">Cancel</button>
       <button id="saveConfirm" type="button" class="primary"><i class="fa fa-check"></i> <span data-i18n="saveConfirm">Write to Proxmox</span></button>
+    </div>
+  </dialog>
+
+  <dialog id="packDialog" class="dialog narrow" aria-labelledby="packTitle">
+    <h2><i class="fa fa-file-archive-o"></i> <span id="packTitle"></span></h2>
+    <p class="small" data-i18n="pack.help">The ZIP has a folder per size with key-size.png in each, like a web icon set, so it can be unpacked into a set on a web server. Another Proxmox Notes can upload it again with the names kept.</p>
+    <label class="label"><span data-i18n="pack.name">Name of the pack</span><input id="packName" type="text" autocomplete="off"></label>
+    <div class="label"><span data-i18n="pack.sizes">Sizes</span>
+      <div class="chips">
+        <label class="icon-chip style-tag"><input id="packSize512" type="checkbox" checked> <span>512 × 512</span></label>
+        <label class="icon-chip style-tag"><input id="packSize200" type="checkbox" checked> <span>200 × 200</span></label>
+        <label class="icon-chip style-tag"><input id="packSize100" type="checkbox" checked> <span>100 × 100</span></label>
+        <label class="icon-chip style-tag"><input id="packOriginal" type="checkbox"> <span data-i18n="pack.original">Original</span></label>
+      </div>
+    </div>
+    <p class="small" data-i18n="pack.keyHelp">File names (the key), for example prowlarr01. Use the same key as in your set to add an icon to it.</p>
+    <ul id="packList" class="pack-list"></ul>
+    <p id="packError" class="small bad"></p>
+    <div class="row-buttons end">
+      <button id="packCancel" type="button" data-i18n="cancel">Cancel</button>
+      <button id="packDownload" type="button" class="primary"><i class="fa fa-download"></i> <span data-i18n="pack.download">Download as ZIP</span></button>
     </div>
   </dialog>
 

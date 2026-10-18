@@ -2,7 +2,7 @@
 
 A self-hosted service that creates, reads and edits the Notes (description) of Proxmox LXC containers and VMs. It has a web GUI, a REST API and an MCP server, and it replaces the browser-only [Proxmox Notes Generator](https://github.com/Snille/Proxmox-Notes).
 
-Status: **0.10.0.** The Notes format, the server (REST, MCP, Docker), reading and writing Notes in Proxmox, the web GUI with its settings page (English and Swedish) and the icon library and icon generation with ComfyUI work, and a ready-made image is published. The cloud image services are not built yet.
+Status: **0.11.0.** The Notes format, the server (REST, MCP, Docker), reading and writing Notes in Proxmox, the web GUI with its settings page (English and Swedish) and the icon library and icon generation with ComfyUI work, and a ready-made image is published. The cloud image services are not built yet.
 
 ## What it will do
 
@@ -83,6 +83,7 @@ The guests' facts come from their config: hostname, IP (static, or the DHCP addr
 - **Layout**: full-width table (default) or the old Markdown layout. A Note stored in the other layout is converted when it is saved, and the editor says so.
 - **Icons**: **Choose icon** opens the icon library as a searchable grid, with a second tab for dashboard-icons. An uploaded image is added to the library first. The icon is always embedded; if the Note has too little room left, it is encoded again at a lower quality.
 - **Icon library** (Settings → Icons): a grid of every icon with search, rename and remove; upload several files or drop them on the page; add icons from [dashboard-icons](https://github.com/homarr-labs/dashboard-icons) by searching for them; import a whole web icon set once (for example the old Notes Generator's, from its `select.json`), after which that web server is no longer needed. An uploaded file is named from its file name without the size (`sonarr01-512x512.png` becomes "Sonarr 01", taking the name from the icon-set list when the key is in it), and with **Replace icons with the same name** an upload updates an icon instead of adding a copy, so a whole folder can be uploaded again, for example in a larger size. Heading icons are chips, added from a searchable list of all 786 Font Awesome 4 icons.
+- **Icon packs** (Settings → Icons): tick icons (or **Select the shown** after a search) and **Download as ZIP**. The ZIP has a folder per size with `<key>-<size>.png`, the layout of a web icon set such as the old Notes Generator's (512, 200 and 100 px drawn from the original, and the original itself if wanted), plus `proxmox-notes-icons.json` with the names and how AI icons were made. Each file name (key) can be changed first, for example `prowlarr01`, so an icon can be unpacked straight into an existing set on a web server. **Upload ZIP** adds a pack again, with the names from the manifest, or, for any other ZIP of images, from the file names, keeping the largest size of each key. All ZIP work happens in the browser.
 - **Create with AI** (a tab in **Choose icon**, and a button in Settings → Icons): give a name and what the icon shows, tick the styles you want, and ComfyUI draws up to four images. Clicking one trims its transparent border, adds it to the library and keeps the prompt, styles and seed with it. The browser remembers which styles were ticked.
 - **From Proxmox**: one button updates IP, MAC, DHCP and OS from the guest's config. When the IP changes, service links that pointed at the old IP move along. An exact OS release in the Note ("Debian 13") is kept when Proxmox only knows the family ("Debian").
 - **Import and export**: export a Note as JSON; import JSON from this tool or from the old Notes Generator, or Markdown. **Copy Markdown** puts the text on the clipboard for the Proxmox Notes field.
@@ -200,7 +201,7 @@ The workflow checks that the tag matches `package.json`, runs the tests, builds 
 | `src/proxmox/` | Targets (`targets.json`), the API client with certificate pinning, and guest facts |
 | `src/comfyui.mjs` | Icon generation: the ComfyUI client, the built-in recipe, own workflows and the jobs |
 | `src/icons.mjs`, `src/dashboard-icons.mjs` | The icon library (`/data/icons`) and the dashboard-icons search |
-| `src/web/` | The web GUI: `app.js`, `settings.js`, `library.js` (icon library and picker), `preview.js` (Proxmox-like rendering and sanitizing), `icons.js` (embedding within the size limit), `i18n.js` (texts), bundled Font Awesome |
+| `src/web/` | The web GUI: `app.js`, `settings.js`, `library.js` (icon library and picker), `packs.js` and `zip.js` (icon packs), `preview.js` (Proxmox-like rendering and sanitizing), `icons.js` (embedding within the size limit), `i18n.js` (texts), bundled Font Awesome |
 | `test/` | Vitest tests |
 | `.github/workflows/ci.yml` | Tests on every push; image and GitHub release on a version tag |
 | `reference/examples/` | Eleven real Notes with addresses and names replaced, used as golden test files |

@@ -37,6 +37,22 @@ async function base64(blob) {
   return btoa(binary);
 }
 
+// Draws the image inside a width × height box, keeping its proportions, as a PNG (for icon packs).
+export async function drawPng(blob, width, height) {
+  const bitmap = await createImageBitmap(blob);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  context.imageSmoothingQuality = 'high';
+  const scale = Math.min(width / bitmap.width, height / bitmap.height);
+  const w = Math.round(bitmap.width * scale);
+  const h = Math.round(bitmap.height * scale);
+  context.drawImage(bitmap, Math.round((width - w) / 2), Math.round((height - h) / 2), w, h);
+  bitmap.close();
+  return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+}
+
 // Draws the image inside a width × height box, keeping its proportions, and encodes WebP.
 async function drawWebp(blob, width, height) {
   const bitmap = await createImageBitmap(blob);
@@ -121,10 +137,11 @@ export const labelFromName = name => name.replace(/-/g, ' ').replace(/\b\w/g, c 
 // ---------- the grid ----------
 
 /**
- * Renders icons as cards. options: { el, selected, onPick, onRename, onRemove }.
- * Without onRename/onRemove the cards are only for picking.
+ * Renders icons as cards. options: { el, selected, onPick, onRename, onRemove, selection, onSelect }.
+ * Without onRename/onRemove the cards are only for picking. With selection (a Set of ids) each card
+ * gets a check box, for example to download icons as a pack.
  */
-export function renderGrid(container, icons, { el, selected, onPick, onRename, onRemove, emptyText }) {
+export function renderGrid(container, icons, { el, selected, onPick, onRename, onRemove, emptyText, selection, onSelect }) {
   container.replaceChildren();
   if (!icons.length) {
     container.append(el('p', { class: 'muted small', text: emptyText ?? t('lib.empty') }));
@@ -136,6 +153,18 @@ export function renderGrid(container, icons, { el, selected, onPick, onRename, o
     const pick = el('button', { type: 'button', class: 'icon-card-pick', 'aria-label': icon.label, onclick: () => onPick?.(icon) }, [image]);
     const label = el('span', { class: 'icon-card-label', text: icon.label });
     card.append(pick, label);
+    if (selection) {
+      card.classList.toggle('chosen', selection.has(icon.id));
+      card.append(el('input', {
+        type: 'checkbox', class: 'icon-card-select', 'aria-label': icon.label, checked: selection.has(icon.id),
+        onchange: event => {
+          if (event.target.checked) selection.add(icon.id);
+          else selection.delete(icon.id);
+          card.classList.toggle('chosen', event.target.checked);
+          onSelect?.();
+        }
+      }));
+    }
     if (onRename || onRemove) {
       const tools = el('div', { class: 'icon-card-tools' });
       if (onRename) {
