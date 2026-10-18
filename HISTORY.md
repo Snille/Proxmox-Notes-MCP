@@ -1,5 +1,10 @@
 # History
 
+## 0.15.1 - 2026-10-18
+
+- Dependency updates for `npm audit`, which now finds nothing. undici 7.29.0 to 7.30.1 (ten advisories: WebSocket, retry and dump interceptors, caches, BalancedPool, decompression). None of them touched this service, which uses undici only for the pinned Proxmox connection (`Agent` and `buildConnector`). 7.30.1 was three days old when it was taken, earlier than the usual two weeks; it is a coordinated security release from the Node.js team (with 6.29.1 and 8.12.2). Erik's choice.
+- `@modelcontextprotocol/server` 2.0.0 to 2.2.0, `@modelcontextprotocol/node` 2.0.0 to 2.1.0, and the client used by the tests 2.0.0 to 2.2.0 (an OAuth advisory in the client, which is not in the image).
+
 ## 0.15.0 - 2026-10-18
 
 - AI icons over MCP. `notes_icon_generate` starts a ComfyUI run (subject, styles, count, host) and lists the styles there are; `notes_icon_generation` follows it and, when it is done, returns small previews (192 px, trimmed) as MCP images the assistant can look at; `notes_icon_keep` trims the chosen image, draws it at the icon size as WebP with the smaller copies, and adds it to the library with the prompt, styles and seed. `notes_icons` shows the styles of each AI icon, so a new icon can match the theme of the others. Erik's aim: an assistant builds a guest and then gives it a good Note with a matching icon, made when none exists.
