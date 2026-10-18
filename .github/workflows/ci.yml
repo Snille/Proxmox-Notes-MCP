@@ -61,8 +61,9 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest
 
-      # The dependencies stage runs on the build machine (pure JavaScript, no install scripts),
-      # so only a few small steps of the arm64 image run under emulation.
+      # The dependencies stage runs on the build machine (no install scripts; sharp's prebuilt
+      # binary is picked for the target with --cpu), so only a few small steps of the arm64 image
+      # run under emulation.
       - uses: docker/build-push-action@v7
         with:
           context: .

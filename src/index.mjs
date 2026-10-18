@@ -14,8 +14,8 @@ const options = await OptionsStore.open(settings.dataDir);
 const proxmox = await Proxmox.open(settings.targetsFile);
 const snapshots = new SnapshotStore(settings.dataDir);
 const icons = await IconStore.open(settings.dataDir);
-const tools = buildTools({ options, proxmox, snapshots, icons });
 const generator = new Generator({ options });
+const tools = buildTools({ options, proxmox, snapshots, icons, generator });
 const webSets = new WebSets({ options });
 const server = createNotesServer({ settings, options, tools, proxmox, icons, generator, webSets });
 

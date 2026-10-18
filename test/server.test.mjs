@@ -121,7 +121,7 @@ describe('MCP', () => {
     const client = new Client({ name: 'test', version: '1.0.0' });
     await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/mcp`)));
     const { tools } = await client.listTools();
-    expect(tools.map(t => t.name).sort()).toEqual(['notes_guests', 'notes_hosts', 'notes_icons', 'notes_import_legacy', 'notes_new', 'notes_options', 'notes_parse', 'notes_prefill', 'notes_prepare_write', 'notes_read', 'notes_render', 'notes_snapshot', 'notes_snapshots', 'notes_status', 'notes_write_confirmed']);
+    expect(tools.map(t => t.name).sort()).toEqual(['notes_guests', 'notes_hosts', 'notes_icon_generate', 'notes_icon_generation', 'notes_icon_keep', 'notes_icons', 'notes_import_legacy', 'notes_new', 'notes_options', 'notes_parse', 'notes_prefill', 'notes_prepare_write', 'notes_read', 'notes_render', 'notes_snapshot', 'notes_snapshots', 'notes_status', 'notes_write_confirmed']);
     const result = await client.callTool({ name: 'notes_new', arguments: { title: 'Test' } });
     expect(result.structuredContent.doc.title).toBe('Test');
     await client.close();
@@ -136,7 +136,7 @@ describe('MCP', () => {
     await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/mcp`), {
       requestInit: { headers: { authorization: 'Bearer test-token-not-secret' } }
     }));
-    expect((await client.listTools()).tools.length).toBe(15);
+    expect((await client.listTools()).tools.length).toBe(18);
     await client.close();
   });
 });

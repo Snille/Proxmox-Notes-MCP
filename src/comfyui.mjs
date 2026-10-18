@@ -3,8 +3,8 @@ import { randomInt, randomUUID } from 'node:crypto';
 // Icon generation with ComfyUI. The server talks to ComfyUI's HTTP API (POST /prompt, GET /history,
 // GET /view), so the browser never needs to reach ComfyUI itself. Either the built-in recipe
 // (Qwen-Image with an optional speed LoRA, then background removal) or the user's own workflow in
-// ComfyUI's API format with placeholders is sent. The images come back as PNG; the browser draws
-// the icon from the one the user picks, as it does for an upload.
+// ComfyUI's API format with placeholders is sent. The images come back as PNG; the browser (or, over
+// MCP, src/imaging.mjs) draws the icon from the one the user picks, as it does for an upload.
 
 const badRequest = message => Object.assign(new Error(message), { statusCode: 400 });
 const upstreamError = message => Object.assign(new Error(message), { statusCode: 502 });

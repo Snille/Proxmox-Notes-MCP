@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import * as z from 'zod';
 import { DEFAULT_LAYOUT, fromLegacyJson, LAYOUTS, noteImages, parseNotes, PROXMOX_DESCRIPTION_LIMIT, renderNotes, SCHEMA } from './format/index.mjs';
 import { newDocument } from './options.mjs';
+import { drawIcon, preview, trimTransparent } from './imaging.mjs';
 import { applyFacts, guestFacts } from './proxmox/facts.mjs';
 import { version } from './version.mjs';
 
@@ -82,7 +83,23 @@ function log(event) {
 
 const iconSchema = z.string().regex(/^[a-z0-9][a-z0-9-]*$/).optional().describe('Icon id from notes_icons');
 
-export function buildTools({ options, proxmox, snapshots, icons }) {
+const generationIdSchema = z.string().regex(/^[0-9a-f-]{36}$/).describe('Generation id from notes_icon_generate');
+
+const MAX_ORIGINAL_BYTES = 8_000_000;
+
+const noGenerator = () => Object.assign(new Error('Icon generation is not set up in this instance'), { statusCode: 400 });
+
+export function buildTools({ options, proxmox, snapshots, icons, generator }) {
+  // Previews of a finished generation, made once: the trimmed image, as the icon will show it.
+  const previews = new Map();
+  const previewsOf = async job => {
+    if (!previews.has(job.id)) {
+      for (const id of previews.keys()) if (!generator.jobs.has(id)) previews.delete(id);
+      previews.set(job.id, await Promise.all(job.images.map(async png => preview(await trimTransparent(png)))));
+    }
+    return previews.get(job.id);
+  };
+
   // An icon from the library as an embedded image, the same way the web editor embeds it.
   const libraryImage = async id => {
     if (!id) return null;
@@ -179,15 +196,88 @@ export function buildTools({ options, proxmox, snapshots, icons }) {
     {
       name: 'notes_icons',
       title: 'Icon library',
-      description: 'List the icons in the library (id and name). Pass an id as "icon" to notes_new or notes_prefill to embed it in a Note.',
+      description: 'List the icons in the library (id and name; for an icon made with AI also the styles it was made with). Pass an id as "icon" to notes_new or notes_prefill to embed it in a Note. When no icon fits, make one with notes_icon_generate.',
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
       inputSchema: z.object({ search: z.string().optional() }).strict(),
       handler: async ({ search }) => {
         const words = String(search ?? '').toLowerCase().split(/\s+/).filter(Boolean);
         const list = (icons?.list() ?? [])
           .filter(icon => words.every(word => `${icon.id} ${icon.label}`.toLowerCase().includes(word)))
-          .map(icon => ({ id: icon.id, label: icon.label }));
+          .map(icon => ({ id: icon.id, label: icon.label, ...(icon.generation?.style ? { styles: icon.generation.style } : {}) }));
         return { icons: list };
+      }
+    },
+    {
+      name: 'notes_icon_generate',
+      title: 'Create an icon with AI',
+      description: 'Start making icon images with ComfyUI. "subject" says what the icon shows, in English (for example "a small cube-shaped computer with a glowing blue AI chip"). "styles" are names from the list this tool returns (styles ticked in the settings are used when it is left out); pick the same frame colour as the other icons on the host so the icon matches their theme. Returns a generation id at once; follow it with notes_icon_generation, then keep one image with notes_icon_keep. Nothing is added to the library yet.',
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      inputSchema: z.object({
+        subject: z.string().min(1).max(1000),
+        styles: z.array(z.string()).optional().describe('Style names; see "availableStyles" in the result'),
+        count: z.number().int().min(1).max(4).optional().describe('How many images, 1 to 4 (default from the settings)'),
+        host: z.string().optional().describe('A ComfyUI address from the settings; the first that answers is used otherwise')
+      }).strict(),
+      handler: async ({ subject, styles, count, host }) => {
+        if (!generator) throw noGenerator();
+        const settings = generator.settings();
+        if (styles) {
+          const unknown = styles.filter(name => !settings.styles.some(style => style.name === name));
+          if (unknown.length) throw Object.assign(new Error(`Unknown styles: ${unknown.join(', ')}. Known: ${settings.styles.map(style => style.name).join(', ')}`), { statusCode: 400 });
+        }
+        const job = await generator.start({ subject, styles, count, host });
+        return {
+          ...job,
+          availableStyles: settings.styles.map(style => ({ name: style.name, prompt: style.prompt, checked: style.checked })),
+          next: 'Call notes_icon_generation with this id every few seconds until state is "done" or "error".'
+        };
+      }
+    },
+    {
+      name: 'notes_icon_generation',
+      title: 'Follow an AI icon',
+      description: 'Show the state of a generation from notes_icon_generate: "queued", "running", "done" or "error". When done, the images are returned as small previews (trimmed, as the icon will look), numbered from 0. Show them to the user or choose the one that fits, then call notes_icon_keep with its number. Generations are kept for 30 minutes.',
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      inputSchema: z.object({ id: generationIdSchema, previews: z.boolean().default(true).describe('Return the previews when done') }).strict(),
+      handler: async ({ id, previews: wanted }) => {
+        if (!generator) throw noGenerator();
+        const job = generator.get(id);
+        const { images, ...rest } = generator.publicJob(job);
+        const result = { ...rest, images: images.length };
+        if (job.state === 'done' && wanted) {
+          result.previews = (await previewsOf(job)).map((data, index) => ({ index, mimeType: 'image/webp', data: data.toString('base64') }));
+        }
+        return result;
+      }
+    },
+    {
+      name: 'notes_icon_keep',
+      title: 'Keep an AI icon',
+      description: 'Add one image of a finished generation to the icon library: its transparent border is trimmed and it is drawn at the instance\'s icon size as WebP (with smaller copies, so a Note can fit), keeping the prompt, styles and seed. Returns the library icon; pass its id as "icon" to notes_new or notes_prefill. With replace, an icon with the same name is replaced instead of adding a copy.',
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+      inputSchema: z.object({
+        id: generationIdSchema,
+        image: z.number().int().min(0).max(3).describe('Image number from notes_icon_generation'),
+        label: z.string().min(1).max(80).describe('Name in the library, for example "MiniCube AI"'),
+        replace: z.boolean().default(false)
+      }).strict(),
+      handler: async ({ id, image, label, replace }) => {
+        if (!generator) throw noGenerator();
+        if (!icons) throw Object.assign(new Error('There is no icon library in this setup'), { statusCode: 400 });
+        const job = generator.get(id);
+        if (job.state !== 'done') throw Object.assign(new Error(`The generation is ${job.state}${job.error ? `: ${job.error}` : ''}; wait until it is done`), { statusCode: 409 });
+        const original = generator.image(id, image);
+        const { width, height } = options.get().iconSet;
+        const drawn = await drawIcon(await trimTransparent(original), { width, height });
+        const icon = await icons.add({
+          label,
+          ...drawn,
+          original: original.length <= MAX_ORIGINAL_BYTES ? original.toString('base64') : undefined,
+          source: 'comfyui',
+          generation: { subject: job.subject, style: job.styles.join(', '), prompt: job.prompt, seed: job.seed },
+          replace
+        });
+        return { icon };
       }
     },
     {

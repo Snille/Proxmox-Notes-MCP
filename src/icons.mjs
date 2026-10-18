@@ -5,7 +5,8 @@ import { join } from 'node:path';
 // The icon library: <dataDir>/icons/<id>.webp is the icon ready to embed (drawn by the browser at
 // the instance's icon size), <id>.v<n>.webp the same icon at lower qualities (for Notes with little
 // room left), <id>.orig.<ext> the uploaded original, index.json the names.
-// The server never decodes images; it only checks file signatures, so no image library is needed.
+// The library itself never decodes images; it only checks file signatures. Icons are drawn by the
+// browser, or for MCP by src/imaging.mjs.
 
 const ID = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const MAX_ICON_BYTES = 200_000;

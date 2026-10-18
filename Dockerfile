@@ -1,9 +1,17 @@
-# The dependencies are plain JavaScript and installed without scripts, so this stage runs on the
-# build machine's own platform; only the small final stage is built for each target platform.
+# The dependencies are installed without scripts, so this stage runs on the build machine's own
+# platform; only the small final stage is built for each target platform. sharp (the image library)
+# comes as a prebuilt binary per platform, so npm is told which one the target needs: without
+# --cpu, an arm64 image built on an amd64 machine would get the amd64 binary. The WebAssembly
+# fallback (9 MB) is not needed next to the native binary.
 FROM --platform=$BUILDPLATFORM node:22-alpine AS dependencies
+ARG TARGETARCH
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+RUN cpu="$([ "$TARGETARCH" = amd64 ] && echo x64 || echo "${TARGETARCH:-x64}")" \
+ && npm ci --omit=dev --ignore-scripts --os=linux --libc=musl --cpu="$cpu" \
+ && test -d "node_modules/@img/sharp-linuxmusl-$cpu" \
+ && rm -rf node_modules/@img/sharp-wasm32 \
+ && npm cache clean --force
 
 FROM node:22-alpine
 LABEL org.opencontainers.image.title="Proxmox Notes" \

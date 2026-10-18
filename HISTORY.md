@@ -1,5 +1,12 @@
 # History
 
+## 0.15.0 - 2026-10-18
+
+- AI icons over MCP. `notes_icon_generate` starts a ComfyUI run (subject, styles, count, host) and lists the styles there are; `notes_icon_generation` follows it and, when it is done, returns small previews (192 px, trimmed) as MCP images the assistant can look at; `notes_icon_keep` trims the chosen image, draws it at the icon size as WebP with the smaller copies, and adds it to the library with the prompt, styles and seed. `notes_icons` shows the styles of each AI icon, so a new icon can match the theme of the others. Erik's aim: an assistant builds a guest and then gives it a good Note with a matching icon, made when none exists.
+- The server now has an image library, [sharp](https://sharp.pixelplumbing.com/) 0.35.5 (Erik's decision). It is used only for drawing icons over MCP; the web GUI still draws in the browser. The image grows by about 30 MB (265 to 295 MB).
+- Docker trap: the dependency stage runs on the build machine's platform, so an arm64 image built on amd64 would have got sharp's amd64 binary. npm is now told the target (`--os=linux --libc=musl --cpu=<target>`), the stage fails if the binary is missing, and the WebAssembly fallback (9 MB) is left out. Checked: the arm64 stage gets `@img/sharp-linuxmusl-arm64`.
+- Tested against ComfyUI 0.41.3 with the built-in recipe: two images in 30 seconds, previews shown, the kept icon 5,552 bytes with copies of 4,310 and 3,860 bytes, embedded in a new Note as 7,427 characters.
+
 ## 0.14.0 - 2026-10-18
 
 - An embedded icon that does not fit no longer stops a Note made over MCP. When the browser adds an icon to the library (upload, dashboard-icons, web set, icon pack, AI), it also encodes two smaller copies at WebP quality 65 and 45 and sends them with the icon; the library keeps them as `<id>.v<n>.webp`. When a Note is over 8192 characters and its image is an embedded library icon, `notes_render` and `notes_prepare_write` put in the largest copy that makes it fit and report it in `icon`. The server still has no image library. Found when an assistant made a Note for MiniCube CT 140: the icon as stored was about 7,100 characters, the Note 9,194, and the icon had to be encoded again by hand.
