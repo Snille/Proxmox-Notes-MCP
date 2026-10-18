@@ -241,6 +241,14 @@ describe('icon library', () => {
     expect((await fetch(`${base}/api/icons/sonarr-2.webp`)).status).toBe(404);
   });
 
+  it('keeps the smaller copies the browser sends with an icon', async () => {
+    const { base } = await start();
+    const added = await (await upload(base, { label: 'Lidarr', webp: webp.toString('base64'), quality: 0.85, variants: [{ quality: 0.45, webp: webp.toString('base64') }] })).json();
+    expect(added.icon).toMatchObject({ id: 'lidarr', quality: 0.85, variants: [{ file: 'lidarr.v1.webp', quality: 0.45 }] });
+    expect((await upload(base, { label: 'Bad', webp: webp.toString('base64'), variants: [{ quality: 0.45, webp: png.toString('base64') }] })).status).toBe(400);
+    expect((await fetch(`${base}/api/icons/lidarr.v1.webp`)).status).toBe(404);
+  });
+
   it('refuses files that are not raster images, and odd ids', async () => {
     const { base } = await start();
     const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>').toString('base64');

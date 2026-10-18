@@ -2,7 +2,7 @@
 
 A self-hosted service that creates, reads and edits the Notes (description) of Proxmox LXC containers and VMs. It has a web GUI, a REST API and an MCP server, and it replaces the browser-only [Proxmox Notes Generator](https://github.com/Snille/Proxmox-Notes).
 
-Status: **0.13.0.** The Notes format, the server (REST, MCP, Docker), reading and writing Notes in Proxmox, the web GUI with its settings page (English and Swedish) and the icon library and icon generation with ComfyUI work, and a ready-made image is published. The cloud image services are not built yet.
+Status: **0.14.0.** The Notes format, the server (REST, MCP, Docker), reading and writing Notes in Proxmox, the web GUI with its settings page (English and Swedish) and the icon library and icon generation with ComfyUI work, and a ready-made image is published. The cloud image services are not built yet.
 
 ## What it will do
 
@@ -81,7 +81,7 @@ The guests' facts come from their config: hostname, IP (static, or the DHCP addr
 - **Editor**: heading icon and title, icon image, description, notes and the sections with their rows (add, move, remove). A guest with no Notes gets a new Note filled in from the template and from Proxmox. Notes that do not follow the format open as raw text, so nothing is lost.
 - **Live preview**, rendered by the same code as the server, cleaned the way current Proxmox versions clean Notes (inline styles removed, only safe tags, attributes and URLs) and styled with Proxmox's own Notes CSS in a panel of the same fixed width. A bar shows the size against the 8192-character limit, and a badge shows when the Note differs from what Proxmox has.
 - **Layout**: full-width table (default) or the old Markdown layout. A Note stored in the other layout is converted when it is saved, and the editor says so.
-- **Icons**: **Choose icon** opens the icon library as a searchable grid, with a second tab for dashboard-icons. An uploaded image is added to the library first. The icon is always embedded; if the Note has too little room left, it is encoded again at a lower quality.
+- **Icons**: **Choose icon** opens the icon library as a searchable grid, with a second tab for dashboard-icons. An uploaded image is added to the library first. The icon is always embedded; if the Note has too little room left, it is encoded again at a lower quality. When the browser adds an icon to the library it also keeps two smaller copies (WebP quality 65 and 45), so the server can do the same over MCP without an image library (see Interfaces).
 - **Icon library** (Settings → Icons): a grid of every icon with search, rename and remove; upload several files or drop them on the page; add icons from [dashboard-icons](https://github.com/homarr-labs/dashboard-icons) by searching for them; import a whole web icon set once (for example the old Notes Generator's, from its `select.json`), after which that web server is no longer needed. An uploaded file is named from its file name without the size (`sonarr01-512x512.png` becomes "Sonarr 01", taking the name from the icon-set list when the key is in it), and with **Replace icons with the same name** an upload updates an icon instead of adding a copy, so a whole folder can be uploaded again, for example in a larger size. Heading icons are chips, added from a searchable list of all 786 Font Awesome 4 icons.
 - **Web icon sets** (Settings → Icons): folders of icons on a web server, one size each (`<key>-<width>x<height>.png`), for example the blue and the green set of the old Notes Generator. **Choose icon → Web server** shows a set's icons; **Link** puts the image's URL in the Note (about 100 characters instead of about 5,000, but the image must be reachable wherever Proxmox is viewed), **Copy into the library and embed** works as before. The icons of a set are found in the folder listing when the web server shows one, in a `proxmox-notes-icons.json` from an unpacked icon pack (in the folder or the one above), and in the image list under Import. A set from before 0.12 (the import icon set) becomes the first web set.
 - **Icon packs** (Settings → Icons): tick icons (or **Select the shown** after a search) and **Download as ZIP**. The ZIP has a folder per size with `<key>-<size>.png`, the layout of a web icon set such as the old Notes Generator's (512, 200 and 100 px drawn from the original, and the original itself if wanted), plus `proxmox-notes-icons.json` with the names and how AI icons were made. Each file name (key) can be changed first, for example `prowlarr01`, so an icon can be unpacked straight into an existing set on a web server. **Upload ZIP** adds a pack again, with the names from the manifest, or, for any other ZIP of images, from the file names, keeping the largest size of each key. All ZIP work happens in the browser.
@@ -161,7 +161,7 @@ The host settings (`/api/settings/...`) are offered in the web GUI and REST only
 | Path | What |
 |------|------|
 | `/` | Web GUI |
-| `/api/icons` | The icon library: `GET` lists, `POST` adds (a WebP drawn by the browser plus the original, as base64), `PATCH`/`DELETE /api/icons/<id>` rename and remove, `GET /api/icons/<id>.webp` serves one |
+| `/api/icons` | The icon library: `GET` lists, `POST` adds (a WebP drawn by the browser, optional smaller copies as `variants: [{quality, webp}]`, plus the original, as base64), `PATCH`/`DELETE /api/icons/<id>` rename and remove, `GET /api/icons/<id>.webp` serves one |
 | `/api/generate` | `POST {subject, styles, count, host}` starts a generation; `GET /api/generate/<id>` shows its state and image URLs; `GET /api/generate/<id>/<n>.png` serves an image |
 | `/api/generator/test` | `POST` the generator settings (also unsaved ones) to test each ComfyUI host |
 | `/api/dashboard-icons?q=<words>` | Searches the names in dashboard-icons; `GET /api/dashboard-icons/<name>.png` fetches one through the server |
@@ -175,6 +175,8 @@ The host settings (`/api/settings/...`) are offered in the web GUI and REST only
 MCP over stdio, for an assistant on the same machine: `node src/stdio.mjs`.
 
 Tools: `notes_status`, `notes_options`, `notes_icons`, `notes_hosts`, `notes_guests`, `notes_read`, `notes_prefill`, `notes_new`, `notes_render`, `notes_parse`, `notes_import_legacy`, `notes_prepare_write`, `notes_write_confirmed`, `notes_snapshots`, `notes_snapshot`. Only `notes_write_confirmed` writes to Proxmox, and only with a confirmation from `notes_prepare_write`.
+
+An icon embedded with `icon` in `notes_new` or `notes_prefill` is the library WebP as it is (often about 7,000 characters). When the Note then does not fit, `notes_render` and `notes_prepare_write` put in the largest smaller copy of that icon that makes it fit, and say so in `icon` (id, quality, new size). Icons added before 0.14.0 have no smaller copies; the write is then refused with a message that says how to fix it (add the icon to the library again in the web GUI, open the Note in the web editor, or shorten the text).
 
 ## Development
 

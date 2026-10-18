@@ -92,6 +92,41 @@ export function buildTools({ options, proxmox, snapshots, icons }) {
     return { src, width: icon.width ?? width, height: icon.height ?? height, key: icon.id };
   };
 
+  // Renders a document. When it is too long and its image is an embedded library icon, the largest
+  // smaller copy of that icon that makes it fit is put in, as the web editor would encode the icon
+  // again (the server cannot encode images). icon tells what happened, or why nothing could be done.
+  const renderFitted = async (doc, layout) => {
+    const markdown = renderNotes(doc, { layout });
+    const image = doc.image;
+    if (markdown.length <= PROXMOX_DESCRIPTION_LIMIT || !icons || !image?.key || !image.src?.startsWith('data:')) {
+      return { doc, markdown, icon: null };
+    }
+    const encodings = await icons.encodings(image.key).catch(() => null);
+    if (!encodings?.some(encoding => encoding.src === image.src)) return { doc, markdown, icon: null };
+    const smaller = encodings.filter(encoding => encoding.src.length < image.src.length);
+    for (const encoding of smaller) {
+      const fitted = { ...doc, image: { ...image, src: encoding.src } };
+      const text = renderNotes(fitted, { layout });
+      if (text.length <= PROXMOX_DESCRIPTION_LIMIT) {
+        return {
+          doc: fitted,
+          markdown: text,
+          icon: {
+            id: image.key,
+            swapped: true,
+            quality: encoding.quality,
+            imageLength: encoding.src.length,
+            message: `The Note was ${markdown.length} characters, so the icon "${image.key}" was put in at a lower quality${encoding.quality ? ` (${Math.round(encoding.quality * 100)})` : ''}: ${image.src.length} → ${encoding.src.length} characters.`
+          }
+        };
+      }
+    }
+    const message = smaller.length
+      ? `Even the smallest copy of the icon "${image.key}" (${smaller.at(-1).src.length} characters) does not make it fit; shorten the text.`
+      : `The icon "${image.key}" has no smaller copy to put in (icons added before 0.14.0 have none). Add it to the library again in the web GUI (for example upload it with "Replace icons with the same name"), open the Note in the web editor, or shorten the text.`;
+    return { doc, markdown, icon: { id: image.key, swapped: false, message } };
+  };
+
   // Single-use confirmations from notes_prepare_write, kept in memory only.
   const confirmations = new Map();
   const takeConfirmation = id => {
@@ -223,7 +258,7 @@ export function buildTools({ options, proxmox, snapshots, icons }) {
     {
       name: 'notes_prepare_write',
       title: 'Prepare writing a Note',
-      description: 'Step 1 of 2 for writing Notes to a guest. Give the new Notes as a document (rendered in the instance layout unless layout is set) or as raw Markdown. Returns the current and the new text, whether anything changes, the size check, and a single-use confirmation that is valid for 10 minutes. Nothing is written. Show the change to the user and get explicit approval before calling notes_write_confirmed.',
+      description: 'Step 1 of 2 for writing Notes to a guest. Give the new Notes as a document (rendered in the instance layout unless layout is set) or as raw Markdown. When a document is too long and its image is an embedded library icon, the largest smaller copy of the icon that makes it fit is put in, and "icon" says so. Returns the current and the new text, whether anything changes, the size check, and a single-use confirmation that is valid for 10 minutes. Nothing is written. Show the change to the user and get explicit approval before calling notes_write_confirmed.',
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
       inputSchema: z.object({
         host: hostSchema,
@@ -233,9 +268,11 @@ export function buildTools({ options, proxmox, snapshots, icons }) {
         markdown: z.string().optional().describe('Raw Notes text, used instead of doc')
       }).strict().refine(a => (a.doc ? 1 : 0) + (a.markdown !== undefined ? 1 : 0) === 1, 'Give either doc or markdown'),
       handler: async ({ host, vmid, doc, layout, markdown }) => {
-        const next = doc ? renderNotes(doc, { layout: layout ?? options.get().layout ?? DEFAULT_LAYOUT }) : markdown;
+        const fitted = doc ? await renderFitted(doc, layout ?? options.get().layout ?? DEFAULT_LAYOUT) : null;
+        const next = fitted ? fitted.markdown : markdown;
         if (next.length > PROXMOX_DESCRIPTION_LIMIT) {
-          throw Object.assign(new Error(`The Notes are ${next.length} characters; Proxmox allows ${PROXMOX_DESCRIPTION_LIMIT}`), { statusCode: 400 });
+          const hint = fitted?.icon ? ` ${fitted.icon.message}` : '';
+          throw Object.assign(new Error(`The Notes are ${next.length} characters; Proxmox allows ${PROXMOX_DESCRIPTION_LIMIT}.${hint}`), { statusCode: 400 });
         }
         const client = proxmox.client(host);
         const guest = await client.guest(vmid);
@@ -257,6 +294,7 @@ export function buildTools({ options, proxmox, snapshots, icons }) {
           next,
           length: next.length,
           limit: PROXMOX_DESCRIPTION_LIMIT,
+          ...(fitted?.icon ? { icon: fitted.icon } : {}),
           confirmation,
           expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null
         };
@@ -319,10 +357,15 @@ export function buildTools({ options, proxmox, snapshots, icons }) {
     {
       name: 'notes_render',
       title: 'Render a Note',
-      description: 'Turn a Note document into the Markdown Proxmox shows, and check it against the 8192-character limit. Nothing is written to Proxmox.',
+      description: 'Turn a Note document into the Markdown Proxmox shows, and check it against the 8192-character limit. When the Note is too long and its image is an embedded library icon, a smaller copy of the icon is put in when that makes it fit, as notes_prepare_write does; "icon" then says so and "doc" is the changed document. Nothing is written to Proxmox.',
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
       inputSchema: z.object({ doc: documentSchema, layout: layoutSchema }).strict(),
-      handler: async ({ doc, layout }) => rendered(doc, layout ?? options.get().layout ?? DEFAULT_LAYOUT)
+      handler: async ({ doc, layout }) => {
+        const chosen = layout ?? options.get().layout ?? DEFAULT_LAYOUT;
+        const fitted = await renderFitted(doc, chosen);
+        if (!fitted.icon) return rendered(doc, chosen);
+        return { ...rendered(fitted.doc, chosen), icon: fitted.icon, ...(fitted.icon.swapped ? { doc: fitted.doc } : {}) };
+      }
     },
     {
       name: 'notes_parse',

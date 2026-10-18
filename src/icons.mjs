@@ -3,12 +3,16 @@ import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 // The icon library: <dataDir>/icons/<id>.webp is the icon ready to embed (drawn by the browser at
-// the instance's icon size), <id>.orig.<ext> the uploaded original, index.json the names.
+// the instance's icon size), <id>.v<n>.webp the same icon at lower qualities (for Notes with little
+// room left), <id>.orig.<ext> the uploaded original, index.json the names.
 // The server never decodes images; it only checks file signatures, so no image library is needed.
 
 const ID = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const MAX_ICON_BYTES = 200_000;
 const MAX_ORIGINAL_BYTES = 8_000_000;
+const MAX_VARIANTS = 4;
+
+const validQuality = value => (typeof value === 'number' && value > 0 && value <= 1 ? value : null);
 
 const SIGNATURES = [
   { type: 'image/png', ext: 'png', test: b => b.length > 8 && b.readUInt32BE(0) === 0x89504e47 },
@@ -74,14 +78,36 @@ export class IconStore {
     return { icon, src: `data:image/webp;base64,${data.toString('base64')}` };
   }
 
+  // The icon and its smaller copies as data: URIs, largest first. Icons added before 0.14.0 have
+  // no copies, so the list then holds only the icon itself.
+  async encodings(id) {
+    const { icon, data } = await this.read(id);
+    const all = [{ quality: icon.quality ?? null, src: `data:image/webp;base64,${data.toString('base64')}` }];
+    for (const variant of icon.variants ?? []) {
+      const bytes = await readFile(join(this.dir, variant.file)).catch(() => null);
+      if (bytes) all.push({ quality: variant.quality, src: `data:image/webp;base64,${bytes.toString('base64')}` });
+    }
+    return all.sort((a, b) => b.src.length - a.src.length);
+  }
+
   // With replace, an icon whose id the name gives already exists is replaced in place (same id and
-  // name, new image), so importing a set again updates it instead of making copies.
-  async add({ label, webp, original, width, height, source, generation, replace = false }) {
+  // name, new image), so importing a set again updates it instead of making copies. variants are
+  // the same icon encoded at a lower quality ({ quality, webp }), drawn by the browser too.
+  async add({ label, webp, quality, variants, original, width, height, source, generation, replace = false }) {
     const name = String(label ?? '').trim();
     if (!name || name.length > 80) throw badRequest('An icon needs a name of 1 to 80 characters');
     const icon = Buffer.from(String(webp ?? ''), 'base64');
     if (imageType(icon)?.type !== 'image/webp') throw badRequest('The icon must be a WebP image');
     if (icon.length > MAX_ICON_BYTES) throw badRequest(`The icon is larger than ${MAX_ICON_BYTES} bytes`);
+    if (variants !== undefined && (!Array.isArray(variants) || variants.length > MAX_VARIANTS)) {
+      throw badRequest(`variants must be a list of at most ${MAX_VARIANTS} images`);
+    }
+    const copies = (variants ?? []).map(variant => {
+      const data = Buffer.from(String(variant?.webp ?? ''), 'base64');
+      if (imageType(data)?.type !== 'image/webp') throw badRequest('Every variant must be a WebP image');
+      if (data.length > MAX_ICON_BYTES) throw badRequest(`A variant is larger than ${MAX_ICON_BYTES} bytes`);
+      return { quality: validQuality(variant.quality), data };
+    });
     let originalFile = null;
     let originalBuffer = null;
     if (original) {
@@ -97,8 +123,8 @@ export class IconStore {
       for (let n = 2; this.icons.some(entry => entry.id === id); n++) {
         id = `${iconId(name).slice(0, 46)}-${n}`;
       }
-    } else if (existing.original) {
-      await unlink(join(this.dir, existing.original.file)).catch(() => {});
+    } else {
+      await this.unlinkFiles(existing, { keepIcon: true });
     }
     await writeFile(join(this.dir, `${id}.webp`), icon);
     const entry = {
@@ -110,6 +136,15 @@ export class IconStore {
       source: String(source ?? 'upload').slice(0, 200),
       addedAt: new Date().toISOString()
     };
+    if (validQuality(quality)) entry.quality = quality;
+    if (copies.length) {
+      entry.variants = [];
+      for (const [index, copy] of copies.entries()) {
+        const file = `${id}.v${index + 1}.webp`;
+        await writeFile(join(this.dir, file), copy.data);
+        entry.variants.push({ file, quality: copy.quality, bytes: copy.data.length });
+      }
+    }
     if (generation && typeof generation === 'object') {
       entry.generation = {
         subject: String(generation.subject ?? '').slice(0, 1000),
@@ -143,8 +178,13 @@ export class IconStore {
   async remove(id) {
     const icon = this.get(id);
     await this.save(this.icons.filter(entry => entry.id !== icon.id));
-    await unlink(join(this.dir, `${icon.id}.webp`)).catch(() => {});
-    if (icon.original) await unlink(join(this.dir, icon.original.file)).catch(() => {});
+    await this.unlinkFiles(icon);
+  }
+
+  async unlinkFiles(icon, { keepIcon = false } = {}) {
+    const files = [icon.original?.file, ...(icon.variants ?? []).map(variant => variant.file)];
+    if (!keepIcon) files.push(`${icon.id}.webp`);
+    for (const file of files.filter(Boolean)) await unlink(join(this.dir, file)).catch(() => {});
   }
 
   async save(icons) {

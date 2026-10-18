@@ -53,7 +53,14 @@ export async function drawPng(blob, width, height) {
   return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 }
 
-// Draws the image inside a width × height box, keeping its proportions, and encodes WebP.
+// The quality of the stored icon, and of the smaller copies kept with it. The server cannot encode
+// images, so over MCP it puts in the largest copy that makes a Note fit, as the editor would encode
+// the icon again.
+const ICON_QUALITY = 0.85;
+const VARIANT_QUALITIES = [0.65, 0.45];
+
+// Draws the image inside a width × height box, keeping its proportions, and encodes WebP, plus the
+// smaller copies (only those that really are smaller).
 async function drawWebp(blob, width, height) {
   const bitmap = await createImageBitmap(blob);
   const canvas = document.createElement('canvas');
@@ -66,18 +73,30 @@ async function drawWebp(blob, width, height) {
   const h = Math.round(bitmap.height * scale);
   context.drawImage(bitmap, Math.round((width - w) / 2), Math.round((height - h) / 2), w, h);
   bitmap.close();
-  const webp = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.85));
+  const encode = quality => new Promise(resolve => canvas.toBlob(resolve, 'image/webp', quality));
+  const webp = await encode(ICON_QUALITY);
   if (!webp || webp.type !== 'image/webp') throw new Error(t('lib.noWebp'));
-  return webp;
+  const variants = [];
+  let smallest = webp.size;
+  for (const quality of VARIANT_QUALITIES) {
+    const variant = await encode(quality);
+    if (variant?.type === 'image/webp' && variant.size < smallest) {
+      variants.push({ quality, blob: variant });
+      smallest = variant.size;
+    }
+  }
+  return { webp, variants };
 }
 
 // The icon is drawn from blob; the original kept with it is `original` when given (for example
 // the untrimmed generated image), otherwise blob itself.
 export async function addIcon({ label, blob, original = blob, source, size, generation, replace = false }) {
-  const webp = await drawWebp(blob, size.width, size.height);
+  const { webp, variants } = await drawWebp(blob, size.width, size.height);
   return (await request('POST', '/api/icons', {
     label,
     webp: await base64(webp),
+    quality: ICON_QUALITY,
+    variants: await Promise.all(variants.map(async variant => ({ quality: variant.quality, webp: await base64(variant.blob) }))),
     original: original.size <= MAX_ORIGINAL_BYTES ? await base64(original) : undefined,
     width: size.width,
     height: size.height,

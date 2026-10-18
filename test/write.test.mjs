@@ -1,8 +1,10 @@
+import { existsSync } from 'node:fs';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { emptyDocument } from '../src/format/index.mjs';
+import { emptyDocument, PROXMOX_DESCRIPTION_LIMIT, renderNotes } from '../src/format/index.mjs';
+import { IconStore } from '../src/icons.mjs';
 import { DEFAULT_OPTIONS } from '../src/options.mjs';
 import { SnapshotStore } from '../src/snapshots.mjs';
 import { buildTools, executeTool } from '../src/tools.mjs';
@@ -98,6 +100,110 @@ describe('write in two steps', () => {
     state.storeDifferent = true;
     const prepared = await run('notes_prepare_write', { host: 'pve1', vmid: 101, markdown: 'New text' });
     await expect(run('notes_write_confirmed', { confirmation: prepared.confirmation })).rejects.toThrow(/stored Notes differ.*snapshot \d{8}T/);
+  });
+});
+
+describe('an embedded library icon that does not fit', () => {
+  // Only the file signature is checked, so a RIFF/WEBP header with filler is a test icon.
+  const webp = (bytes, fill) => Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBPVP8 '), Buffer.alloc(bytes, fill)]);
+  const main = webp(4000, 1);
+  const medium = webp(3000, 2);
+  const small = webp(1200, 3);
+  let icons;
+  let dataDir;
+
+  beforeEach(async () => {
+    dataDir = await mkdtemp(join(tmpdir(), 'proxmox-notes-fit-'));
+    icons = await IconStore.open(dataDir);
+    tools = buildTools({ options: { get: () => DEFAULT_OPTIONS, source: 'default' }, proxmox: fakeProxmox().proxmox, snapshots, icons });
+  });
+
+  const noteWith = async (icon, notes) => {
+    const { doc } = await run('notes_new', { title: 'MiniCube', icon });
+    return { ...doc, notes };
+  };
+
+  it('puts in the largest smaller copy that makes the Note fit, and says so', async () => {
+    await icons.add({ label: 'AI', webp: main.toString('base64'), quality: 0.85, width: 100, height: 100, variants: [
+      { quality: 0.65, webp: medium.toString('base64') },
+      { quality: 0.45, webp: small.toString('base64') }
+    ] });
+    const doc = await noteWith('ai', 'x'.repeat(2500));
+    expect(renderNotes(doc).length).toBeGreaterThan(PROXMOX_DESCRIPTION_LIMIT);
+
+    const prepared = await run('notes_prepare_write', { host: 'pve1', vmid: 101, doc });
+    expect(prepared.length).toBeLessThanOrEqual(PROXMOX_DESCRIPTION_LIMIT);
+    expect(prepared.next).toContain(medium.toString('base64'));
+    expect(prepared.icon).toMatchObject({ id: 'ai', swapped: true, quality: 0.65 });
+    expect(prepared.icon.message).toMatch(/lower quality \(65\)/);
+
+    const rendered = await run('notes_render', { doc });
+    expect(rendered).toMatchObject({ fits: true, icon: { swapped: true, quality: 0.65 } });
+    expect(rendered.doc.image.src).toBe(`data:image/webp;base64,${medium.toString('base64')}`);
+  });
+
+  it('takes the smallest copy when only that fits', async () => {
+    await icons.add({ label: 'AI', webp: main.toString('base64'), variants: [
+      { quality: 0.65, webp: medium.toString('base64') },
+      { quality: 0.45, webp: small.toString('base64') }
+    ] });
+    const prepared = await run('notes_prepare_write', { host: 'pve1', vmid: 101, doc: await noteWith('ai', 'x'.repeat(3500)) });
+    expect(prepared.icon).toMatchObject({ swapped: true, quality: 0.45 });
+  });
+
+  it('leaves a Note that fits as it is', async () => {
+    await icons.add({ label: 'AI', webp: main.toString('base64'), variants: [{ quality: 0.45, webp: small.toString('base64') }] });
+    const prepared = await run('notes_prepare_write', { host: 'pve1', vmid: 101, doc: await noteWith('ai', 'short') });
+    expect(prepared.icon).toBeUndefined();
+    expect(prepared.next).toContain(main.toString('base64'));
+  });
+
+  it('refuses with a clear message for an icon without smaller copies', async () => {
+    await icons.add({ label: 'Old', webp: main.toString('base64') });
+    await expect(run('notes_prepare_write', { host: 'pve1', vmid: 101, doc: await noteWith('old', 'x'.repeat(2500)) }))
+      .rejects.toThrow(/8192\. The icon "old" has no smaller copy/);
+  });
+
+  it('refuses when even the smallest copy is too large', async () => {
+    await icons.add({ label: 'AI', webp: main.toString('base64'), variants: [{ quality: 0.45, webp: small.toString('base64') }] });
+    await expect(run('notes_prepare_write', { host: 'pve1', vmid: 101, doc: await noteWith('ai', 'x'.repeat(6000)) }))
+      .rejects.toThrow(/Even the smallest copy of the icon "ai"/);
+  });
+
+  it('does not swap an image that is not the library icon', async () => {
+    await icons.add({ label: 'AI', webp: main.toString('base64'), variants: [{ quality: 0.45, webp: small.toString('base64') }] });
+    const doc = await noteWith('ai', 'x'.repeat(2500));
+    doc.image.src = `data:image/webp;base64,${webp(4000, 9).toString('base64')}`;
+    await expect(run('notes_prepare_write', { host: 'pve1', vmid: 101, doc })).rejects.toThrow(/^The Notes are \d+ characters; Proxmox allows 8192\.$/);
+  });
+
+  it('keeps the copies on disk, replaces them with the icon and removes them with it', async () => {
+    await icons.add({ label: 'AI', webp: main.toString('base64'), variants: [
+      { quality: 0.65, webp: medium.toString('base64') },
+      { quality: 0.45, webp: small.toString('base64') }
+    ] });
+    expect(icons.get('ai').variants).toEqual([
+      { file: 'ai.v1.webp', quality: 0.65, bytes: medium.length },
+      { file: 'ai.v2.webp', quality: 0.45, bytes: small.length }
+    ]);
+    expect((await icons.encodings('ai')).map(encoding => encoding.quality)).toEqual([null, 0.65, 0.45]);
+
+    await icons.add({ label: 'AI', webp: main.toString('base64'), replace: true });
+    expect(icons.get('ai').variants).toBeUndefined();
+    expect(existsSync(join(dataDir, 'icons', 'ai.v1.webp'))).toBe(false);
+
+    await icons.add({ label: 'AI', webp: main.toString('base64'), replace: true, variants: [{ quality: 0.45, webp: small.toString('base64') }] });
+    await icons.remove('ai');
+    expect(existsSync(join(dataDir, 'icons', 'ai.v1.webp'))).toBe(false);
+  });
+
+  it('refuses variants that are not WebP images, or too many', async () => {
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(24)]);
+    await expect(icons.add({ label: 'AI', webp: main.toString('base64'), variants: [{ quality: 0.5, webp: png.toString('base64') }] }))
+      .rejects.toThrow(/Every variant must be a WebP image/);
+    const five = Array.from({ length: 5 }, () => ({ quality: 0.5, webp: small.toString('base64') }));
+    await expect(icons.add({ label: 'AI', webp: main.toString('base64'), variants: five })).rejects.toThrow(/at most 4/);
+    expect(icons.list()).toHaveLength(0);
   });
 });
 

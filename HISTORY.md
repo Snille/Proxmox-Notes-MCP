@@ -1,5 +1,11 @@
 # History
 
+## 0.14.0 - 2026-10-18
+
+- An embedded icon that does not fit no longer stops a Note made over MCP. When the browser adds an icon to the library (upload, dashboard-icons, web set, icon pack, AI), it also encodes two smaller copies at WebP quality 65 and 45 and sends them with the icon; the library keeps them as `<id>.v<n>.webp`. When a Note is over 8192 characters and its image is an embedded library icon, `notes_render` and `notes_prepare_write` put in the largest copy that makes it fit and report it in `icon`. The server still has no image library. Found when an assistant made a Note for MiniCube CT 140: the icon as stored was about 7,100 characters, the Note 9,194, and the icon had to be encoded again by hand.
+- Icons added before 0.14.0 have no smaller copies. The write is refused as before, now with a message that says how to fix it. Uploading the icon again with **Replace icons with the same name** adds the copies.
+- Tested in a browser: a 100 px icon of 6,022 bytes got copies of 4,712 and 4,154 bytes, and a Note of 9,241 characters fitted at 7,493 with the quality 65 copy.
+
 ## 0.13.0 - 2026-10-18
 
 - The guest list marks each Note's image: a yellow link when it links to an image on a web server (hovering shows which), a grey picture when its image is embedded. A link wins when a Note has both, since that is the dependency to see. It works for any Notes text, also text that does not follow the format, and is updated after a save. `notes_guests` with `notes: true` returns the same as `images: { linked: [hosts], embedded }`.
