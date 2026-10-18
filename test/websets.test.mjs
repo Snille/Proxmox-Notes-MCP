@@ -73,4 +73,9 @@ describe('web icon sets', () => {
     expect(withDefaults({ iconSet, webSets: [] }).webSets).toEqual([]);
     expect(withDefaults({}).webSets).toEqual([]);
   });
+
+  it('takes the size of the old icon set from its folder name', () => {
+    const iconSet = { baseUrl: 'https://icons.example.com/green/512x512/', width: 100, height: 100, extension: '.png' };
+    expect(withDefaults({ iconSet }).webSets[0]).toMatchObject({ width: 512, height: 512 });
+  });
 });

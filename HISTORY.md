@@ -1,5 +1,9 @@
 # History
 
+## 0.12.1 - 2026-10-18
+
+- The import icon set that becomes the first web set takes its size from a folder name such as `512x512`. Its width and height were also the library's icon size (100), so a set pointing at a 512 px folder found no icons (seen in production right after 0.12.0).
+
 ## 0.12.0 - 2026-10-18
 
 - Web icon sets: Settings → Icons has a list of folders on a web server (name, address, size, extension), for example the blue and green sets on Erik's web server. **Choose icon** has a tab **Web server** with the icons of a set, shown through the server. **Link to the web server** puts the image URL in the Note (a Note with a linked icon was 1,257 characters), **Copy into the library and embed** copies it and embeds it as before. Embedding stays the default.

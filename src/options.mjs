@@ -184,9 +184,18 @@ export function withDefaults(options) {
   // Styles from 0.10.0 before release were whole prompts with {{subject}}; they become the defaults.
   if (generator.styles?.some(style => String(style.prompt).includes('{{subject}}'))) delete generator.styles;
   // Before web sets existed, the one icon set was only for importing; it becomes the first web set.
-  const webSets = options.webSets ?? (options.iconSet?.baseUrl
-    ? [{ name: 'Web', baseUrl: options.iconSet.baseUrl, width: options.iconSet.width ?? 100, height: options.iconSet.height ?? 100, extension: options.iconSet.extension ?? '.png' }]
-    : defaults.webSets);
+  // Its width and height were also the library's icon size, so a folder named like "512x512" wins.
+  const fromIconSet = iconSet => {
+    const folder = iconSet.baseUrl.replace(/\/+$/, '').match(/\/(\d+)x(\d+)$/);
+    return {
+      name: 'Web',
+      baseUrl: iconSet.baseUrl,
+      width: folder ? Number(folder[1]) : iconSet.width ?? 100,
+      height: folder ? Number(folder[2]) : iconSet.height ?? 100,
+      extension: iconSet.extension ?? '.png'
+    };
+  };
+  const webSets = options.webSets ?? (options.iconSet?.baseUrl ? [fromIconSet(options.iconSet)] : defaults.webSets);
   return {
     ...defaults,
     ...options,
