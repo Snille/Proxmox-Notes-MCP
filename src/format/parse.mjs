@@ -92,6 +92,31 @@ function sectionId(title, used) {
 }
 
 /**
+ * What kind of images a Notes text has, in any layout and also in text that does not follow the
+ * format: { linked: [hosts of http(s) images], embedded: true when an image is a data: URI }.
+ * Linked images depend on their web server being reachable where Proxmox is viewed.
+ */
+export function noteImages(markdown) {
+  const sources = [
+    ...String(markdown ?? '').matchAll(/<img\b[^>]*?\ssrc\s*=\s*["']([^"']+)["']/gi),
+    ...String(markdown ?? '').matchAll(/!\[[^\]]*\]\(\s*<?([^)\s>]+)/g)
+  ].map(match => match[1].trim());
+  const linked = new Set();
+  let embedded = false;
+  for (const source of sources) {
+    if (/^data:image\//i.test(source)) embedded = true;
+    else if (/^https?:\/\//i.test(source)) {
+      try {
+        linked.add(new URL(source).host);
+      } catch {
+        // Not a URL; not an image Proxmox would show.
+      }
+    }
+  }
+  return { linked: [...linked], embedded };
+}
+
+/**
  * Reads a Notes text into a document: the full-width table layout, or the Markdown tables of
  * the original generator. A successful result says which layout it was.
  * Content that does not fit the format is never dropped: the result is { ok: false } instead,

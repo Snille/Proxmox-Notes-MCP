@@ -6,6 +6,7 @@ import {
   fromLegacyJson,
   legacyResources,
   link,
+  noteImages,
   parseNotes,
   PROXMOX_DESCRIPTION_LIMIT,
   renderNotes,
@@ -235,5 +236,18 @@ describe('table layout (default)', () => {
 
   it('rejects an unknown layout', () => {
     expect(() => renderNotes(emptyDocument(), { layout: 'fancy' })).toThrow(/Unknown layout/);
+  });
+});
+
+describe('noteImages', () => {
+  it('tells linked images (with their hosts) from embedded ones, in any text', () => {
+    const linked = readFileSync(new URL('../reference/examples/Sonarr02.md', import.meta.url), 'utf8');
+    expect(noteImages(linked)).toEqual({ linked: ['icons.example.com'], embedded: false });
+    const embedded = '<table width="100%"><tr><td><img src="data:image/webp;base64,AAAA" width="100"></td></tr></table>';
+    expect(noteImages(embedded)).toEqual({ linked: [], embedded: true });
+    expect(noteImages('Some text ![x](https://a.example/i.png) and <IMG SRC=\'http://b.example:8080/j.png\'>'))
+      .toEqual({ linked: ['b.example:8080', 'a.example'], embedded: false });
+    expect(noteImages('')).toEqual({ linked: [], embedded: false });
+    expect(noteImages('<a href="https://x.example">no image</a>')).toEqual({ linked: [], embedded: false });
   });
 });

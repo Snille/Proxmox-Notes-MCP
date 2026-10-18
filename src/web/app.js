@@ -2,6 +2,7 @@ import {
   DEFAULT_LAYOUT,
   fromLegacyJson,
   LAYOUTS,
+  noteImages,
   parseNotes,
   PROXMOX_DESCRIPTION_LIMIT,
   renderNotes,
@@ -358,6 +359,7 @@ async function confirmSave() {
     if (guest && state.host === result.host) {
       guest.notes = state.mode === 'form' ? 'format' : 'other';
       guest.noteTitle = state.mode === 'form' ? state.doc.title : '';
+      guest.images = noteImages(state.original);
       renderGuests();
     }
   } catch (error) {
@@ -592,6 +594,18 @@ const NOTE_BADGES = {
   error: { key: 'badge.error', class: 'bad' }
 };
 
+// A small mark for a Note's images: a link when it depends on a web server, a picture when its
+// image is embedded. A link wins, since that is the dependency worth seeing.
+function imageMark(images) {
+  if (images?.linked?.length) {
+    return el('i', { class: 'fa fa-link image-mark linked', title: t('guest.linked', { hosts: images.linked.join(', ') }) });
+  }
+  if (images?.embedded) {
+    return el('i', { class: 'fa fa-picture-o image-mark embedded', title: t('guest.embedded') });
+  }
+  return null;
+}
+
 function renderGuests() {
   const filter = $('guestFilter').value.trim().toLowerCase();
   const list = $('guestList');
@@ -605,6 +619,7 @@ function renderGuests() {
         el('i', { class: `fa ${guest.type === 'lxc' ? 'fa-cube' : 'fa-desktop'} status-${guest.status}` }),
         el('span', { class: 'vmid', text: String(guest.vmid) }),
         el('span', { class: 'name', text: guest.name }),
+        imageMark(guest.images),
         badge ? el('span', { class: `badge ${badge.class}`, text: t(badge.key), title: t(`${badge.key}Title`) }) : null
       ])
     ]));

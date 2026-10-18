@@ -1,5 +1,9 @@
 # History
 
+## 0.13.0 - 2026-10-18
+
+- The guest list marks each Note's image: a yellow link when it links to an image on a web server (hovering shows which), a grey picture when its image is embedded. A link wins when a Note has both, since that is the dependency to see. It works for any Notes text, also text that does not follow the format, and is updated after a save. `notes_guests` with `notes: true` returns the same as `images: { linked: [hosts], embedded }`.
+
 ## 0.12.1 - 2026-10-18
 
 - The import icon set that becomes the first web set takes its size from a folder name such as `512x512`. Its width and height were also the library's icon size (100), so a set pointing at a 512 px folder found no icons (seen in production right after 0.12.0).

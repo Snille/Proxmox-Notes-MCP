@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import * as z from 'zod';
-import { DEFAULT_LAYOUT, fromLegacyJson, LAYOUTS, parseNotes, PROXMOX_DESCRIPTION_LIMIT, renderNotes, SCHEMA } from './format/index.mjs';
+import { DEFAULT_LAYOUT, fromLegacyJson, LAYOUTS, noteImages, parseNotes, PROXMOX_DESCRIPTION_LIMIT, renderNotes, SCHEMA } from './format/index.mjs';
 import { newDocument } from './options.mjs';
 import { applyFacts, guestFacts } from './proxmox/facts.mjs';
 import { version } from './version.mjs';
@@ -166,7 +166,7 @@ export function buildTools({ options, proxmox, snapshots, icons }) {
     {
       name: 'notes_guests',
       title: 'Guests on a host',
-      description: 'List the LXC containers and VMs on one Proxmox host that the token can see. With notes=true, also tell for each guest whether its Notes are empty, in the Notes format, or other text.',
+      description: 'List the LXC containers and VMs on one Proxmox host that the token can see. With notes=true, also tell for each guest whether its Notes are empty, in the Notes format, or other text, and which images they have (images.linked: web server hosts the Note links to; images.embedded: an embedded image).',
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
       inputSchema: z.object({ host: hostSchema, notes: z.boolean().default(false) }).strict(),
       handler: async ({ host, notes }) => {
@@ -180,6 +180,7 @@ export function buildTools({ options, proxmox, snapshots, icons }) {
               const parsed = markdown.trim() ? parseNotes(markdown) : null;
               guest.notes = !parsed ? 'empty' : parsed.ok ? 'format' : 'other';
               guest.noteTitle = parsed?.ok ? parsed.doc.title : '';
+              guest.images = noteImages(markdown);
             } catch (error) {
               guest.notes = 'error';
               guest.noteError = error.message;

@@ -245,3 +245,8 @@ pre.code { overflow-x: auto; padding: .6rem; background: var(--panel-2); border-
 .pack-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) minmax(8rem, 12rem); gap: .5rem; align-items: center; }
 .pack-row img { width: 32px; height: 32px; }
 .pack-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+
+/* Image marks in the guest list */
+.image-mark { font-size: 12px; width: 14px; text-align: center; }
+.image-mark.linked { color: var(--warn); }
+.image-mark.embedded { color: var(--muted); }

@@ -5,6 +5,8 @@
 export const LANGUAGES = { en: 'English', sv: 'Svenska' };
 
 const en = {
+  'guest.linked': 'Linked image from {hosts}: shown only where that web server can be reached',
+  'guest.embedded': 'Embedded image: needs no web server',
   'web.tab': 'Web server',
   'web.notReady': 'No web icon set is set. Add one under Settings → Icons → Web icon sets.',
   'web.set': 'Web icon set',
@@ -226,6 +228,8 @@ const en = {
 };
 
 const sv = {
+  'guest.linked': 'Länkad bild från {hosts}: visas bara där den webbservern kan nås',
+  'guest.embedded': 'Inbäddad bild: behöver ingen webbserver',
   'web.tab': 'Webbserver',
   'web.notReady': 'Inget webbserver-set är inställt. Lägg till ett under Inställningar → Ikoner → Webbserver-set.',
   'web.set': 'Webbserver-set',
