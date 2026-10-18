@@ -3,6 +3,7 @@ import { OptionsStore } from './options.mjs';
 import { Proxmox } from './proxmox/index.mjs';
 import { IconStore } from './icons.mjs';
 import { Generator } from './comfyui.mjs';
+import { WebSets } from './websets.mjs';
 import { SnapshotStore } from './snapshots.mjs';
 import { createNotesServer } from './server.mjs';
 import { buildTools } from './tools.mjs';
@@ -15,7 +16,8 @@ const snapshots = new SnapshotStore(settings.dataDir);
 const icons = await IconStore.open(settings.dataDir);
 const tools = buildTools({ options, proxmox, snapshots, icons });
 const generator = new Generator({ options });
-const server = createNotesServer({ settings, options, tools, proxmox, icons, generator });
+const webSets = new WebSets({ options });
+const server = createNotesServer({ settings, options, tools, proxmox, icons, generator, webSets });
 
 server.listen(settings.port, settings.host, () => {
   console.log(JSON.stringify({

@@ -54,11 +54,11 @@ export function initSettings(context) {
     await uploadFiles([...event.dataTransfer.files].filter(file => file.type.startsWith('image/')));
   });
   $('btnDashboardIcons').addEventListener('click', async () => {
-    await openIconDialog({ el: ctx.el, toast: ctx.toast, size: iconSize(), images: draft.images, mode: 'add', tab: 'dashboard', generator: ctx.getOptions().generator });
+    await openIconDialog({ el: ctx.el, toast: ctx.toast, size: iconSize(), images: draft.images, mode: 'add', tab: 'dashboard', generator: ctx.getOptions().generator, webSets: ctx.getOptions().webSets });
     await loadLibrary();
   });
   $('btnGenerateIcons').addEventListener('click', async () => {
-    await openIconDialog({ el: ctx.el, toast: ctx.toast, size: iconSize(), images: draft.images, mode: 'add', tab: 'generate', generator: ctx.getOptions().generator });
+    await openIconDialog({ el: ctx.el, toast: ctx.toast, size: iconSize(), images: draft.images, mode: 'add', tab: 'generate', generator: ctx.getOptions().generator, webSets: ctx.getOptions().webSets });
     await loadLibrary();
   });
   $('btnImportSet').addEventListener('click', importIconSet);
@@ -90,6 +90,11 @@ export function initSettings(context) {
   $('faSearch').addEventListener('input', renderFaGrid);
   $('faClose').addEventListener('click', () => $('faDialog').close());
   $('btnTestGenerator').addEventListener('click', testGenerator);
+  $('btnAddWebSet').addEventListener('click', () => {
+    const { width, height, extension } = draft.iconSet;
+    draft.webSets.push({ name: t('web.newSet'), baseUrl: '', width, height, extension });
+    renderWebSets();
+  });
   $('btnAddStyle').addEventListener('click', addStyle);
   $('genWorkflowFile').addEventListener('change', loadWorkflowFile);
   for (const radio of document.querySelectorAll('input[name="genMode"]')) radio.addEventListener('change', showGeneratorMode);
@@ -124,6 +129,7 @@ export function refreshSettings() {
   renderHeaderIcons();
   renderLibrary();
   renderStyles();
+  renderWebSets();
   loadHosts();
 }
 
@@ -288,6 +294,50 @@ function fillOptionForms() {
   renderTemplate();
   fillAppearance();
   fillGenerator();
+  renderWebSets();
+}
+
+// ---------- web icon sets ----------
+
+function renderWebSets() {
+  const list = draft.webSets;
+  $('webSetList').replaceChildren(...list.map((set, index) => {
+    const text = (key, attributes = {}) => ctx.el('input', { type: 'text', value: set[key], spellcheck: 'false', ...attributes, oninput: event => { set[key] = event.target.value.trim(); } });
+    const number = key => ctx.el('input', { type: 'number', min: 16, max: 1024, value: set[key], oninput: event => { set[key] = Number(event.target.value); } });
+    const result = ctx.el('p', { class: 'small' });
+    return ctx.el('div', { class: 'style-item' }, [
+      ctx.el('div', { class: 'grid-2' }, [
+        ctx.el('label', { class: 'label' }, [ctx.el('span', { text: t('gen.styleName') }), text('name')]),
+        ctx.el('label', { class: 'label' }, [ctx.el('span', { text: t('web.address') }), text('baseUrl', { placeholder: 'https://icons.example.com/blue/100x100' })])
+      ]),
+      ctx.el('div', { class: 'grid-3' }, [
+        ctx.el('label', { class: 'label' }, [ctx.el('span', { text: t('gen.width') }), number('width')]),
+        ctx.el('label', { class: 'label' }, [ctx.el('span', { text: t('gen.height') }), number('height')]),
+        ctx.el('label', { class: 'label' }, [ctx.el('span', { text: t('set.extension') }), text('extension')])
+      ]),
+      result,
+      ctx.el('div', { class: 'row-buttons' }, [
+        ctx.el('button', { type: 'button', class: 'small', onclick: () => testWebSet(set, result) }, [ctx.el('i', { class: 'fa fa-plug' }), ctx.el('span', { text: ` ${t('set.test')}` })]),
+        ctx.el('button', { type: 'button', class: 'small danger', onclick: () => { list.splice(index, 1); renderWebSets(); } }, [
+          ctx.el('i', { class: 'fa fa-trash' }), ctx.el('span', { text: ` ${t('remove')}` })
+        ])
+      ])
+    ]);
+  }));
+}
+
+async function testWebSet(set, result) {
+  result.className = 'small muted';
+  result.textContent = t('loading');
+  try {
+    const found = await request('POST', '/api/web-sets/test', set);
+    const sources = found.sources.map(source => t(`web.source.${source}`)).join(', ');
+    result.className = found.icons.length ? 'small test-ok' : 'small bad';
+    result.textContent = found.icons.length ? t('web.found', { count: found.icons.length, sources }) : t('web.none');
+  } catch (error) {
+    result.className = 'small bad';
+    result.textContent = error.message;
+  }
 }
 
 // ---------- image generator ----------

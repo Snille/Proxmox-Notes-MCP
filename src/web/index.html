@@ -64,7 +64,7 @@
                     <button id="btnIconRemove" type="button"><i class="fa fa-times"></i> <span data-i18n="noIcon">No icon</span></button>
                   </div>
                   <p id="iconInfo" class="muted small"></p>
-                  <p class="muted small" data-i18n="iconHelp">The icon is embedded in the Note, so Proxmox shows it without a web server. Uploaded images are added to the icon library.</p>
+                  <p class="muted small" data-i18n="iconHelp">The icon is embedded in the Note, so Proxmox shows it without a web server. It can also be linked from a web icon set (Choose icon → Web server). Uploaded images are added to the icon library.</p>
                 </div>
               </div>
             </fieldset>
@@ -223,6 +223,16 @@ pvenode cert info</pre>
       </fieldset>
 
       <fieldset>
+        <legend data-i18n="web.sets">Web icon sets</legend>
+        <p class="small" data-i18n="web.setsHelp">Folders of icons on a web server, one size each, named key-WIDTHxHEIGHT.png, for example https://icons.example.com/blue/100x100. In Choose icon → Web server a Note can link to them or copy them into the library. The icons are found in the folder listing (when the web server shows one), in a proxmox-notes-icons.json from an unpacked icon pack, and in the image list under Import below.</p>
+        <div id="webSetList"></div>
+        <div class="row-buttons">
+          <button id="btnAddWebSet" type="button"><i class="fa fa-plus"></i> <span data-i18n="web.addSet">Add web set</span></button>
+          <button type="button" class="primary save-options"><i class="fa fa-check"></i> <span data-i18n="set.save">Save settings</span></button>
+        </div>
+      </fieldset>
+
+      <fieldset>
         <legend data-i18n="set.headerIcons">Heading icons</legend>
         <p class="small" data-i18n="lib.headerHelp">The Font Awesome icons offered for the heading of a Note.</p>
         <div id="headerIconChips" class="chips"></div>
@@ -327,6 +337,7 @@ pvenode cert info</pre>
     <nav class="dialog-tabs">
       <button type="button" data-icon-tab="library" class="active"><i class="fa fa-th"></i> <span data-i18n="lib.title">Icon library</span></button>
       <button type="button" data-icon-tab="dashboard"><i class="fa fa-th-large"></i> <span data-i18n="lib.dashboardTab">dashboard-icons</span></button>
+      <button type="button" data-icon-tab="web"><i class="fa fa-globe"></i> <span data-i18n="web.tab">Web server</span></button>
       <button type="button" data-icon-tab="generate"><i class="fa fa-magic"></i> <span data-i18n="gen.tab">Create with AI</span></button>
     </nav>
     <div id="iconTabLibrary">
@@ -344,6 +355,23 @@ pvenode cert info</pre>
       </div>
       <p class="muted small" data-i18n="lib.dashboardHelp">Icons from the open dashboard-icons set (github.com/homarr-labs/dashboard-icons). Clicking one copies it into your library.</p>
       <div id="dashboardGrid" class="icon-grid scroll"></div>
+    </div>
+    <div id="iconTabWeb" hidden>
+      <p id="webNotReady" class="muted small" data-i18n="web.notReady">No web icon set is set. Add one under Settings → Icons → Web icon sets.</p>
+      <div id="webReady">
+        <div class="library-toolbar">
+          <select id="webSet" data-i18n-aria-label="web.set"></select>
+          <input id="webSearch" type="search" data-i18n-placeholder="lib.search" data-i18n-aria-label="lib.search">
+          <span id="webCount" class="muted small"></span>
+          <span class="spacer"></span>
+          <button id="webRefresh" type="button" class="small" data-i18n-title="web.refresh"><i class="fa fa-refresh"></i></button>
+        </div>
+        <div id="webModeRow" class="library-toolbar">
+          <label class="check"><input type="radio" name="webMode" value="link"> <span data-i18n="web.modeLink">Link to the web server (small Note; the image must be reachable where Proxmox is viewed)</span></label>
+          <label class="check"><input type="radio" name="webMode" value="embed" checked> <span data-i18n="web.modeEmbed">Copy into the library and embed</span></label>
+        </div>
+        <div id="webGrid" class="icon-grid scroll"></div>
+      </div>
     </div>
     <div id="iconTabGenerate" hidden>
       <p id="genNotReady" class="muted small" data-i18n="gen.notReady">No ComfyUI host is set. Add one under Settings → Image generator.</p>

@@ -260,7 +260,7 @@ async function handleSettings(req, url, proxmox) {
   return { status: 404, body: { error: 'Unknown settings endpoint' } };
 }
 
-export function createNotesServer({ settings, options, tools, proxmox, icons, generator }) {
+export function createNotesServer({ settings, options, tools, proxmox, icons, generator, webSets }) {
   const toolMap = new Map(tools.map(tool => [tool.name, tool]));
   const validateHost = settings.allowedHosts.length ? hostHeaderValidation(settings.allowedHosts) : null;
   const mcp = createMcpNodeHandler(tools);
@@ -280,10 +280,27 @@ export function createNotesServer({ settings, options, tools, proxmox, icons, ge
         return;
       }
 
-      // An icon from the configured icon set, fetched by the server so the browser can embed it
-      // (a canvas cannot read a cross-origin image). Only URLs built from the icon set are fetched.
+      // The icons of a web icon set, for the Web server tab of the icon dialog.
+      const webSetMatch = url.pathname.match(/^\/api\/web-sets\/(\d{1,2})\/icons$/);
+      if (req.method === 'GET' && webSetMatch && webSets) {
+        sendJson(res, 200, await webSets.icons(webSetMatch[1], { refresh: url.searchParams.has('refresh') }));
+        return;
+      }
+      // Tests a web set from the settings form before it is saved.
+      if (req.method === 'POST' && url.pathname === '/api/web-sets/test' && webSets) {
+        const parsed = optionsSchema.shape.webSets.element.safeParse(await readJsonBody(req));
+        if (!parsed.success) throw Object.assign(new Error(z.prettifyError(parsed.error)), { statusCode: 400 });
+        sendJson(res, 200, await webSets.iconsOf(parsed.data, { refresh: true }));
+        return;
+      }
+
+      // An icon from the import icon set or from web set number "set", fetched by the server so the
+      // browser can show and embed it (a canvas cannot read a cross-origin image). Only URLs built
+      // from a configured set are fetched.
       if (req.method === 'GET' && url.pathname === '/api/icon') {
-        const source = iconSetUrl(options.get().iconSet, url.searchParams.get('key'));
+        const setParam = url.searchParams.get('set');
+        const set = setParam === null ? options.get().iconSet : options.get().webSets[Number(setParam)];
+        const source = iconSetUrl(set, url.searchParams.get('key'));
         if (!source || !/^[\w.-]+-$/.test(url.searchParams.get('key'))) {
           sendJson(res, 400, { error: 'An icon-set key is required, and an icon set must be configured' });
           return;

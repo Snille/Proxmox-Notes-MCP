@@ -483,9 +483,17 @@ async function embedLibraryIcon(icon) {
 
 async function pickIcon() {
   const icon = await openIconDialog({
-    el, toast, size: iconSize(), images: state.options?.images, mode: 'pick', generator: state.options?.generator, name: state.doc?.title ?? ''
+    el, toast, size: iconSize(), images: state.options?.images, mode: 'pick', generator: state.options?.generator, name: state.doc?.title ?? '',
+    webSets: state.options?.webSets ?? []
   });
   if (!icon) return;
+  // A linked image from a web icon set: the Note points at the web server instead of embedding.
+  if (icon.link) {
+    state.doc.image = icon.link;
+    state.iconLabel = icon.label;
+    update();
+    return;
+  }
   try {
     await embedLibraryIcon(icon);
   } catch (error) {

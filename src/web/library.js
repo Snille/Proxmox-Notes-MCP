@@ -195,7 +195,7 @@ let picker = null;
  * dialog open so several dashboard-icons can be added to the library. Returns a promise of the
  * chosen icon, or null when the dialog is closed.
  */
-export function openIconDialog({ el, toast, size, images = [], mode = 'pick', tab = 'library', generator = null, name = '' }) {
+export function openIconDialog({ el, toast, size, images = [], mode = 'pick', tab = 'library', generator = null, name = '', webSets = [] }) {
   const dialog = document.getElementById('iconDialog');
   const state = { icons: [], resolve: null };
   picker = state;
@@ -205,12 +205,70 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
   // otherwise it is just added to the library and the dialog stays open.
   const embedNew = () => mode === 'pick' && $('iconDialogEmbed').checked;
 
+  // Resolves with a library icon, or with { link } for an image the Note links to.
   const choose = icon => {
     if (mode === 'pick') {
       dialog.close();
       state.resolve?.(icon);
       state.resolve = null;
     }
+  };
+
+  // ---------- web icon sets ----------
+
+  const webIcons = { set: null, icons: [] };
+  const webIconSrc = (set, key) => `/api/icon?set=${set}&key=${encodeURIComponent(key)}`;
+  const showWeb = () => {
+    const filter = $('webSearch').value.trim().toLowerCase();
+    const shown = webIcons.icons.filter(icon => !filter || `${icon.key} ${icon.label}`.toLowerCase().includes(filter));
+    $('webCount').textContent = t('lib.count', { shown: shown.length, total: webIcons.icons.length });
+    renderGrid($('webGrid'), shown.map(icon => ({ ...icon, id: icon.key, src: webIconSrc(webIcons.set, icon.key) })), {
+      el,
+      emptyText: t('web.none'),
+      onPick: item => pickWeb(item)
+    });
+  };
+  const loadWeb = async (refresh = false) => {
+    const set = Number($('webSet').value || 0);
+    $('webGrid').replaceChildren(el('p', { class: 'muted small', text: t('loading') }));
+    try {
+      const found = await request('GET', `/api/web-sets/${set}/icons${refresh ? '?refresh=1' : ''}`);
+      webIcons.set = set;
+      webIcons.icons = found.icons;
+      webIcons.size = found.size;
+      showWeb();
+    } catch (error) {
+      $('webGrid').replaceChildren(el('p', { class: 'bad small', text: error.message }));
+    }
+  };
+  const pickWeb = async item => {
+    const linking = mode === 'pick' && document.querySelector('input[name="webMode"]:checked')?.value === 'link';
+    if (linking) {
+      choose({ link: { src: item.url, width: webIcons.size.width, height: webIcons.size.height, key: item.key }, label: item.label });
+      return;
+    }
+    try {
+      const response = await fetch(item.src);
+      if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error ?? response.statusText);
+      const set = webSets[webIcons.set];
+      const icon = await addIcon({ label: item.label, blob: await response.blob(), source: `web:${set?.name ?? webIcons.set}:${item.key}`, size });
+      state.icons.push(icon);
+      toast(t('lib.added', { name: icon.label }));
+      if (embedNew()) choose(icon);
+    } catch (error) {
+      toast(error.message, 'bad');
+    }
+  };
+  const fillWeb = () => {
+    const ready = webSets.length > 0;
+    $('webReady').hidden = !ready;
+    $('webNotReady').hidden = ready;
+    $('webModeRow').hidden = mode !== 'pick';
+    $('webSet').replaceChildren(...webSets.map((set, index) => el('option', { value: String(index), text: set.name })));
+    $('webSet').hidden = webSets.length < 2;
+    $('webSearch').value = '';
+    $('webGrid').replaceChildren();
+    webIcons.icons = [];
   };
 
   const showLibrary = () => renderGrid($('iconDialogGrid'), state.icons.filter(icon => matches(icon, $('iconDialogSearch').value.trim())), { el, onPick: choose, emptyText: t('lib.emptyPick') });
@@ -364,6 +422,8 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
     $('iconTabLibrary').hidden = name !== 'library';
     $('iconTabDashboard').hidden = name !== 'dashboard';
     $('iconTabGenerate').hidden = name !== 'generate';
+    $('iconTabWeb').hidden = name !== 'web';
+    if (name === 'web' && webSets.length && !webIcons.icons.length) loadWeb();
     $('iconDialogEmbedRow').hidden = mode !== 'pick';
     if (name === 'dashboard' && !$('dashboardGrid').childElementCount) searchDashboard();
     if (name === 'library') showLibrary();
@@ -383,10 +443,15 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
     });
     dialog.addEventListener('close', () => { picker?.resolve?.(null); if (picker) picker.resolve = null; });
     $('btnGenerate').addEventListener('click', () => picker?.generate());
+    $('webSet').addEventListener('change', () => picker?.loadWeb());
+    $('webSearch').addEventListener('input', () => picker?.showWeb());
+    $('webRefresh').addEventListener('click', () => picker?.loadWeb(true));
     $('genSubject').addEventListener('input', () => picker?.showPrompt());
     $('genStyleTags').addEventListener('change', () => { picker?.rememberStyles(); picker?.showPrompt(); });
   }
 
+  state.loadWeb = loadWeb;
+  state.showWeb = showWeb;
   state.generate = generate;
   state.showPrompt = showPrompt;
   state.rememberStyles = rememberStyles;
@@ -412,6 +477,7 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
   $('dashboardGrid').replaceChildren();
   $('iconDialogEmbed').checked = true;
   fillGenerator();
+  fillWeb();
   dialog.showModal();
   loadLibrary().then(() => setTab(tab));
   return new Promise(resolve => { state.resolve = resolve; });

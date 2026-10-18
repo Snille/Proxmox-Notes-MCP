@@ -23,6 +23,8 @@ export const DEFAULT_OPTIONS = {
   layout: 'table',
   // An icon set on a web server, as in the original generator: <baseUrl>/<key><width>x<height><extension>.
   iconSet: { baseUrl: '', width: 100, height: 100, extension: '.png' },
+  // Web icon sets a Note can link to (or copy icons from), each a folder of one size on a web server.
+  webSets: [],
   images: [],
   osNames: ['Debian 13', 'Debian 12', 'Ubuntu Server 24.04', 'Ubuntu Server 22.04', 'Windows Server 2025', 'Home Assistant OS'],
   template: {
@@ -87,6 +89,13 @@ export const optionsSchema = z.object({
     height: z.number().int().min(16).max(512),
     extension: z.string().regex(/^\.[a-z0-9]+$/)
   }),
+  webSets: z.array(z.object({
+    name: z.string().trim().min(1).max(40),
+    baseUrl: HTTP_URL,
+    width: z.number().int().min(16).max(1024),
+    height: z.number().int().min(16).max(1024),
+    extension: z.string().regex(/^\.[a-z0-9]+$/)
+  })).max(20),
   images: z.array(z.object({ label: z.string().min(1), key: z.string().regex(/^[\w.-]+-$/, 'an icon key ends with "-", for example "sonarr01-"') })),
   osNames: z.array(z.string().min(1)),
   template: z.object({
@@ -174,9 +183,14 @@ export function withDefaults(options) {
   const generator = { ...options.generator };
   // Styles from 0.10.0 before release were whole prompts with {{subject}}; they become the defaults.
   if (generator.styles?.some(style => String(style.prompt).includes('{{subject}}'))) delete generator.styles;
+  // Before web sets existed, the one icon set was only for importing; it becomes the first web set.
+  const webSets = options.webSets ?? (options.iconSet?.baseUrl
+    ? [{ name: 'Web', baseUrl: options.iconSet.baseUrl, width: options.iconSet.width ?? 100, height: options.iconSet.height ?? 100, extension: options.iconSet.extension ?? '.png' }]
+    : defaults.webSets);
   return {
     ...defaults,
     ...options,
+    webSets,
     generator: { ...defaults.generator, ...generator, recipe: { ...defaults.generator.recipe, ...generator.recipe } }
   };
 }

@@ -1,5 +1,11 @@
 # History
 
+## 0.12.0 - 2026-10-18
+
+- Web icon sets: Settings → Icons has a list of folders on a web server (name, address, size, extension), for example the blue and green sets on Erik's web server. **Choose icon** has a tab **Web server** with the icons of a set, shown through the server. **Link to the web server** puts the image URL in the Note (a Note with a linked icon was 1,257 characters), **Copy into the library and embed** copies it and embeds it as before. Embedding stays the default.
+- Which icons a set has: its folder listing when the web server shows one, a `proxmox-notes-icons.json` from an unpacked icon pack in the folder or the one above, and the image list ("Label = key"). Erik's Apache answers 403 for folder listings, so there only the 36 listed icons show until the listing is turned on or a key is added to the list. A **Test** button in the settings shows how many icons were found and from where, before saving.
+- The icon set used only for importing becomes the first web set when an instance starts with 0.12.
+
 ## 0.11.0 - 2026-10-18
 
 - Icon packs. In Settings → Icons every icon has a check box; **Select the shown** ticks all icons the search shows, and **Download as ZIP** opens a dialog with the pack name, the sizes (512, 200 and 100 px, and the original) and a file name (key) per icon, prefilled from the name ("Prowlarr" becomes `prowlarr01`). The ZIP has `<size>/<key>-<size>.png`, the layout of a web icon set, so it can be unpacked into an existing set (for example the blue one on the web server), and `proxmox-notes-icons.json` with the names and the AI data. Two icons with the same key, a bad key or no size are refused before anything is drawn. Each time the dialog opens it starts with 512, 200 and 100 px ticked and the original unticked.
