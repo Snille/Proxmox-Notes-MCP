@@ -38,6 +38,7 @@ const CONTENT_TYPES = {
   '.woff2': 'font/woff2',
   '.woff': 'font/woff',
   '.png': 'image/png',
+  '.ico': 'image/x-icon',
   '.svg': 'image/svg+xml',
   '.txt': 'text/plain; charset=utf-8'
 };

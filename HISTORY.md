@@ -1,5 +1,9 @@
 # History
 
+## 0.15.2 - 2026-10-21
+
+- The web GUI has a favicon: Erik's blue-framed robot holding a server, cut out along the frame with a transparent background, as `favicon.ico` (16, 32 and 48 px), `favicon-32.png`, `favicon-192.png` and `apple-touch-icon.png` (180 px on the dark theme's background). The server serves `.ico` files.
+
 ## 0.15.1 - 2026-10-18
 
 - Dependency updates for `npm audit`, which now finds nothing. undici 7.29.0 to 7.30.1 (ten advisories: WebSocket, retry and dump interceptors, caches, BalancedPool, decompression). None of them touched this service, which uses undici only for the pinned Proxmox connection (`Agent` and `buildConnector`). 7.30.1 was three days old when it was taken, earlier than the usual two weeks; it is a coordinated security release from the Node.js team (with 6.29.1 and 8.12.2). Erik's choice.
