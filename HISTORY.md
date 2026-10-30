@@ -1,5 +1,9 @@
 # History
 
+## 0.16.1 - 2026-10-30
+
+- Create with AI shows that a clicked image is saved. The image is marked **Saving…** and then **Saved** with a green frame, and the text next to Create says where it went (the library, or the files on the web server). Before, only a short message in the corner showed it, and it was easy to miss while the dialog stayed open. Erik's report.
+
 ## 0.16.0 - 2026-10-30
 
 - **Choose icon → Icon library** has a trash button on each icon, as Settings → Icons already had, so an icon can be removed without leaving the editor.

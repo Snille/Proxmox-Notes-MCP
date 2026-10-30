@@ -403,7 +403,7 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
     const ticked = writableSets.filter(set => $('genWebSets').querySelector(`input[value="${set.index}"]`)?.checked);
     if (!key || !ticked.length) {
       toast(t('gen.webNeed'), 'bad');
-      return;
+      return null;
     }
     try {
       const image = await base64(await trimTransparent(await (await fetch(src)).blob()));
@@ -412,12 +412,15 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
         const done = await writeToWeb(set, key, image);
         if (done) written.push(done);
       }
-      if (!written.length) return;
-      toast(t('gen.webSaved', { files: written.map(item => `${item.set}: ${item.file}`).join(', ') }));
+      if (!written.length) return null;
+      const message = t('gen.webSaved', { files: written.map(item => `${item.set}: ${item.file}`).join(', ') });
+      toast(message);
       const first = written[0];
       if (embedNew()) choose({ link: { src: first.url, width: first.width, height: first.height, key: first.key }, label });
+      return message;
     } catch (error) {
       toast(error.message, 'bad');
+      return null;
     }
   };
 
@@ -434,10 +437,39 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
         generation: { subject: job.subject, style: job.styles.join(', '), prompt: job.prompt, seed: job.seed }
       });
       state.icons.push(icon);
-      toast(t('lib.added', { name: icon.label }));
+      const message = t('gen.librarySaved', { name: icon.label });
+      toast(message);
       if (embedNew()) choose(icon);
+      return message;
     } catch (error) {
       toast(error.message, 'bad');
+      return null;
+    }
+  };
+
+  // Shows on the clicked image and next to Create that it is being saved, and then where it went,
+  // since the dialog stays open when the icon does not go into the Note.
+  const keepWithFeedback = async (job, label, item) => {
+    const card = [...$('genGrid').children].find(child => child.querySelector('img')?.getAttribute('src') === item.src);
+    if (!card || card.classList.contains('saving')) return;
+    const badge = card.querySelector('.icon-card-badge') ?? el('span', { class: 'icon-card-badge' });
+    card.classList.remove('saved');
+    card.classList.add('saving');
+    badge.textContent = t('gen.saving');
+    card.append(badge);
+    const status = $('genStatus');
+    status.className = 'small';
+    status.textContent = t('gen.saving');
+    const message = await keepGenerated(job, label, item.src);
+    card.classList.remove('saving');
+    if (message) {
+      card.classList.add('saved');
+      badge.replaceChildren(el('i', { class: 'fa fa-check' }), ` ${t('gen.saved')}`);
+      status.className = 'small test-ok';
+      status.textContent = message;
+    } else {
+      badge.remove();
+      status.textContent = '';
     }
   };
 
@@ -451,6 +483,7 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
     const button = $('btnGenerate');
     const status = $('genStatus');
     button.disabled = true;
+    status.className = 'small';
     $('genGrid').replaceChildren();
     try {
       let { job } = await request('POST', '/api/generate', {
@@ -467,7 +500,7 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
       status.textContent = t('gen.done', { seconds: Math.round(job.elapsedMs / 1000), host: job.host });
       renderGrid($('genGrid'), job.images.map((src, index) => ({ id: `${job.id}-${index}`, label: `${label} ${index + 1}`, src })), {
         el,
-        onPick: item => keepGenerated(job, label, item.src)
+        onPick: item => keepWithFeedback(job, label, item)
       });
     } catch (error) {
       status.textContent = '';

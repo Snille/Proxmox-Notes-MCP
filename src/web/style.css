@@ -241,6 +241,10 @@ pre.code { overflow-x: auto; padding: .6rem; background: var(--panel-2); border-
 /* Icon packs */
 .icon-card.chosen { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .icon-card-select { position: absolute; top: .3rem; left: .3rem; margin: 0; }
+.icon-card.saving { opacity: .6; }
+.icon-card.saved { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.icon-card-badge { position: absolute; top: .3rem; right: .3rem; padding: .05rem .45rem; border-radius: 999px; font-size: 12px; background: var(--panel-2); border: 1px solid var(--border); }
+.icon-card.saved .icon-card-badge { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
 .pack-list { list-style: none; margin: .4rem 0; padding: 0; max-height: 40vh; overflow: auto; display: flex; flex-direction: column; gap: .3rem; }
 .pack-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) minmax(8rem, 12rem); gap: .5rem; align-items: center; }
 .pack-row img { width: 32px; height: 32px; }
