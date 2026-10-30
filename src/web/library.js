@@ -290,7 +290,17 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
     webIcons.icons = [];
   };
 
-  const showLibrary = () => renderGrid($('iconDialogGrid'), state.icons.filter(icon => matches(icon, $('iconDialogSearch').value.trim())), { el, onPick: choose, emptyText: t('lib.emptyPick') });
+  const removeFromLibrary = async icon => {
+    try {
+      await removeIcon(icon.id);
+      state.icons = state.icons.filter(item => item.id !== icon.id);
+      toast(t('lib.removed', { name: icon.label }));
+      showLibrary();
+    } catch (error) {
+      toast(error.message, 'bad');
+    }
+  };
+  const showLibrary = () => renderGrid($('iconDialogGrid'), state.icons.filter(icon => matches(icon, $('iconDialogSearch').value.trim())), { el, onPick: choose, onRemove: removeFromLibrary, emptyText: t('lib.emptyPick') });
 
   const loadLibrary = async () => {
     try {
@@ -362,7 +372,57 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
     $('genPrompt').textContent = subject ? [...parts, `Motif: ${subject}.`].join(' ') : '';
   };
 
+  // Where a chosen AI image goes: the library, or the ticked web sets that have a folder. This
+  // browser remembers the choice.
+  const TARGET_KEY = 'proxmox-notes.generatorTarget';
+  const writableSets = webSets.map((set, index) => ({ ...set, index })).filter(set => set.folder);
+  const target = () => (writableSets.length && document.querySelector('input[name="genTarget"]:checked')?.value === 'web' ? 'web' : 'library');
+  const showTarget = () => {
+    $('genWebTarget').hidden = target() !== 'web';
+    try {
+      localStorage.setItem(TARGET_KEY, target());
+    } catch {
+      // Storage may be blocked; the library is then the default next time.
+    }
+  };
+  const keyFromLabel = label => label.toLowerCase().replace(/\s+/g, '').replace(/[^\w.-]/g, '');
+
+  const writeToWeb = async (set, key, image, replace = false) => {
+    const response = await fetch(`/api/web-sets/${set.index}/icons`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key, image, replace })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (response.status === 409 && !replace && confirm(t('gen.webExists', { error: data.error }))) return writeToWeb(set, key, image, true);
+    if (response.status === 409) return null;
+    if (!response.ok) throw new Error(data.error ?? response.statusText);
+    return data.written;
+  };
+
+  const keepOnWeb = async (label, src) => {
+    const key = $('genKey').value.trim() || keyFromLabel(label);
+    const ticked = writableSets.filter(set => $('genWebSets').querySelector(`input[value="${set.index}"]`)?.checked);
+    if (!key || !ticked.length) {
+      toast(t('gen.webNeed'), 'bad');
+      return;
+    }
+    try {
+      const image = await base64(await trimTransparent(await (await fetch(src)).blob()));
+      const written = [];
+      for (const set of ticked) {
+        const done = await writeToWeb(set, key, image);
+        if (done) written.push(done);
+      }
+      if (!written.length) return;
+      toast(t('gen.webSaved', { files: written.map(item => `${item.set}: ${item.file}`).join(', ') }));
+      const first = written[0];
+      if (embedNew()) choose({ link: { src: first.url, width: first.width, height: first.height, key: first.key }, label });
+    } catch (error) {
+      toast(error.message, 'bad');
+    }
+  };
+
   const keepGenerated = async (job, label, src) => {
+    if (target() === 'web') return keepOnWeb(label, src);
     try {
       const original = await (await fetch(src)).blob();
       const icon = await addIcon({
@@ -430,6 +490,20 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
     $('genCount').value = String(generator.count);
     $('genHost').replaceChildren(el('option', { value: '', text: t('gen.autoHost') }), ...generator.hosts.map(url => el('option', { value: url, text: url })));
     $('genName').value = name;
+    $('genKey').value = '';
+    $('genTargetRow').hidden = !writableSets.length;
+    $('genWebSets').replaceChildren(...writableSets.map(set => el('label', { class: 'icon-chip style-tag', title: set.folder }, [
+      el('input', { type: 'checkbox', value: String(set.index), checked: true }),
+      el('span', { text: `${set.name} (${set.width} × ${set.height})` })
+    ])));
+    let lastTarget = 'library';
+    try {
+      lastTarget = localStorage.getItem(TARGET_KEY) ?? 'library';
+    } catch {
+      // Storage may be blocked.
+    }
+    for (const radio of document.querySelectorAll('input[name="genTarget"]')) radio.checked = radio.value === lastTarget;
+    showTarget();
     $('genSubject').value = '';
     $('genStatus').textContent = '';
     $('genGrid').replaceChildren();
@@ -443,6 +517,8 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
     $('iconTabGenerate').hidden = name !== 'generate';
     $('iconTabWeb').hidden = name !== 'web';
     if (name === 'web' && webSets.length && !webIcons.icons.length) loadWeb();
+    // The check box sits next to the search box of the tab that is shown.
+    ({ library: $('iconDialogSearch'), dashboard: $('dashboardCount'), web: $('webCount'), generate: $('genStatus') })[name].after($('iconDialogEmbedRow'));
     $('iconDialogEmbedRow').hidden = mode !== 'pick';
     if (name === 'dashboard' && !$('dashboardGrid').childElementCount) searchDashboard();
     if (name === 'library') showLibrary();
@@ -466,6 +542,8 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
     $('webSearch').addEventListener('input', () => picker?.showWeb());
     $('webRefresh').addEventListener('click', () => picker?.loadWeb(true));
     $('genSubject').addEventListener('input', () => picker?.showPrompt());
+    for (const radio of document.querySelectorAll('input[name="genTarget"]')) radio.addEventListener('change', () => picker?.showTarget());
+    $('genName').addEventListener('input', () => { $('genKey').placeholder = picker?.keyFromLabel($('genName').value) || 'prowlarr01'; });
     $('genStyleTags').addEventListener('change', () => { picker?.rememberStyles(); picker?.showPrompt(); });
   }
 
@@ -473,6 +551,8 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
   state.showWeb = showWeb;
   state.generate = generate;
   state.showPrompt = showPrompt;
+  state.showTarget = showTarget;
+  state.keyFromLabel = keyFromLabel;
   state.rememberStyles = rememberStyles;
   state.showLibrary = showLibrary;
   state.searchDashboard = searchDashboard;

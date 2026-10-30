@@ -287,6 +287,11 @@ export function createNotesServer({ settings, options, tools, proxmox, icons, ge
         sendJson(res, 200, await webSets.icons(webSetMatch[1], { refresh: url.searchParams.has('refresh') }));
         return;
       }
+      // Writes an icon (base64 image, drawn at the set's size) into a web set that has a folder.
+      if (req.method === 'POST' && webSetMatch && webSets) {
+        sendJson(res, 200, { written: await webSets.write(webSetMatch[1], await readJsonBody(req, ICON_UPLOAD_BYTES)) });
+        return;
+      }
       // Tests a web set from the settings form before it is saved.
       if (req.method === 'POST' && url.pathname === '/api/web-sets/test' && webSets) {
         const parsed = optionsSchema.shape.webSets.element.safeParse(await readJsonBody(req));

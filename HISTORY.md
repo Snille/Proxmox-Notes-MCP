@@ -1,5 +1,12 @@
 # History
 
+## 0.16.0 - 2026-10-30
+
+- **Choose icon → Icon library** has a trash button on each icon, as Settings → Icons already had, so an icon can be removed without leaving the editor.
+- **Put a new icon in the Note right away** sits next to the search box of the tab that is shown (in Create with AI, next to Create) instead of at the bottom of the dialog.
+- An AI icon can be saved on the web server instead of in the library. A web icon set can have a **folder** this service writes to (a mounted folder, for example the web server's share); **Create with AI → Save to → Web server** writes the chosen image, trimmed, into every ticked set with a folder, drawn at the set's size and in its format, as `<key>-<width>x<height><extension>`. An existing file is only replaced after a question. The browser remembers the choice. Erik's request: his own icons live on his web server in three sizes, so a new icon belongs there too.
+- New endpoint `POST /api/web-sets/<n>/icons` (`{ key, image, replace }`); the server draws the file with sharp.
+
 ## 0.15.2 - 2026-10-21
 
 - The web GUI has a favicon: Erik's blue-framed robot holding a server, cut out along the frame with a transparent background, as `favicon.ico` (16, 32 and 48 px), `favicon-32.png`, `favicon-192.png` and `apple-touch-icon.png` (180 px on the dark theme's background). The server serves `.ico` files.

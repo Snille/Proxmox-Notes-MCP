@@ -94,7 +94,10 @@ export const optionsSchema = z.object({
     baseUrl: HTTP_URL,
     width: z.number().int().min(16).max(1024),
     height: z.number().int().min(16).max(1024),
-    extension: z.string().regex(/^\.[a-z0-9]+$/)
+    extension: z.string().regex(/^\.[a-z0-9]+$/),
+    // Where this service can write the set's files (a mounted folder), so new icons can be put in
+    // the set. Empty means the set is only read.
+    folder: z.union([z.literal(''), z.string().trim().max(300).regex(/^\/[^\0]*$/, 'a folder is an absolute path, for example /icons/blue/100x100')]).optional()
   })).max(20),
   images: z.array(z.object({ label: z.string().min(1), key: z.string().regex(/^[\w.-]+-$/, 'an icon key ends with "-", for example "sonarr01-"') })),
   osNames: z.array(z.string().min(1)),

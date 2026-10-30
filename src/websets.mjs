@@ -6,6 +6,9 @@
 // server shows one, a proxmox-notes-icons.json (an unpacked icon pack) in the folder or the one
 // above it, and the image list in the settings ("Label = key", from the old select.json).
 
+import { access, mkdir, rename, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { drawFile } from './imaging.mjs';
 import { iconSetUrl } from './options.mjs';
 
 const MANIFEST = 'proxmox-notes-icons.json';
@@ -110,5 +113,33 @@ export class WebSets {
     const result = { icons, sources, size: { width: set.width, height: set.height } };
     this.cache.set(cacheKey, { at: Date.now(), result });
     return result;
+  }
+
+  /**
+   * Writes an image into set number `index`, drawn at the set's size, as
+   * <folder>/<key><width>x<height><extension>. An existing file is only replaced with `replace`.
+   */
+  async write(index, { key, image, replace = false }) {
+    const set = this.set(index);
+    if (!set.folder) throw Object.assign(new Error(`The web set ${set.name} has no folder to write to`), { statusCode: 400 });
+    const fileKey = String(key ?? '').trim().replace(/-*$/, '-');
+    if (!/^\w[\w.-]*-$/.test(fileKey)) throw Object.assign(new Error('A file name (key) has only letters, digits, ".", "_" and "-", for example prowlarr01'), { statusCode: 400 });
+    const name = `${fileKey}${set.width}x${set.height}${set.extension}`;
+    const file = join(set.folder, name);
+    if (!replace && await access(file).then(() => true, () => false)) {
+      throw Object.assign(new Error(`${name} is already in ${set.name}`), { statusCode: 409, exists: name });
+    }
+    const data = await drawFile(Buffer.from(String(image ?? ''), 'base64'), set, set.extension);
+    const temporary = `${file}.${process.pid}.tmp`;
+    try {
+      await mkdir(set.folder, { recursive: true });
+      await writeFile(temporary, data);
+      await rename(temporary, file);
+    } catch (error) {
+      // Usually the folder is not mounted, or the service may not write there.
+      throw Object.assign(new Error(`Cannot write to ${set.folder} (${error.code ?? error.message})`), { statusCode: 422 });
+    }
+    this.cache.clear();
+    return { set: set.name, key: fileKey, file: name, url: iconSetUrl(set, fileKey), width: set.width, height: set.height };
   }
 }

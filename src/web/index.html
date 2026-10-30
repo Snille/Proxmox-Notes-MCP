@@ -347,6 +347,7 @@ pvenode cert info</pre>
     <div id="iconTabLibrary">
       <div class="library-toolbar">
         <input id="iconDialogSearch" type="search" data-i18n-placeholder="lib.search" data-i18n-aria-label="lib.search">
+        <label id="iconDialogEmbedRow" class="check" hidden><input id="iconDialogEmbed" type="checkbox" checked> <span data-i18n="lib.embedNew">Put a new icon in the Note right away</span></label>
         <span class="spacer"></span>
         <label class="button"><i class="fa fa-upload"></i> <span data-i18n="lib.upload">Upload</span><input id="iconDialogUpload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden></label>
       </div>
@@ -383,6 +384,17 @@ pvenode cert info</pre>
         <label class="label"><span data-i18n="gen.name">Name in the library</span><input id="genName" type="text" autocomplete="off" data-i18n-placeholder="gen.namePlaceholder"></label>
         <label class="label"><span data-i18n="gen.subject">What the icon shows</span><textarea id="genSubject" rows="2" data-i18n-placeholder="gen.subjectPlaceholder"></textarea></label>
         <div class="label"><span data-i18n="gen.style">Styles</span><div id="genStyleTags" class="chips style-tags"></div></div>
+        <div id="genTargetRow" class="library-toolbar">
+          <span class="small" data-i18n="gen.saveTo">Save to</span>
+          <label class="check"><input type="radio" name="genTarget" value="library" checked> <span data-i18n="lib.title">Icon library</span></label>
+          <label class="check"><input type="radio" name="genTarget" value="web"> <span data-i18n="web.tab">Web server</span></label>
+        </div>
+        <div id="genWebTarget" hidden>
+          <div class="library-toolbar">
+            <label class="label inline"><span data-i18n="gen.key">File name (key)</span><input id="genKey" type="text" autocomplete="off" spellcheck="false" placeholder="prowlarr01"></label>
+            <div id="genWebSets" class="chips"></div>
+          </div>
+        </div>
         <div class="library-toolbar">
           <label class="label inline"><span data-i18n="gen.count">Images</span><select id="genCount"><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
           <label class="label inline"><span data-i18n="gen.host">ComfyUI</span><select id="genHost"></select></label>
@@ -393,13 +405,11 @@ pvenode cert info</pre>
           <summary data-i18n="gen.promptSent">Prompt sent to ComfyUI</summary>
           <p id="genPrompt" class="small code-text"></p>
         </details>
-        <p class="muted small" data-i18n="gen.pickHelp">Click the image you want; it is added to the library with a transparent border trimmed off.</p>
+        <p class="muted small" data-i18n="gen.pickHelp">Click the image you want; it is saved where Save to says, with a transparent border trimmed off.</p>
         <div id="genGrid" class="icon-grid scroll generated"></div>
       </div>
     </div>
     <div class="row-buttons end">
-      <label id="iconDialogEmbedRow" class="check" hidden><input id="iconDialogEmbed" type="checkbox" checked> <span data-i18n="lib.embedNew">Put a new icon in the Note right away</span></label>
-      <span class="spacer"></span>
       <button id="iconDialogClose" type="button" data-i18n="close">Close</button>
     </div>
   </dialog>

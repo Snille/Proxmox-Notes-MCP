@@ -55,6 +55,18 @@ export async function drawIcon(buffer, { width, height }) {
   return { webp: webp.toString('base64'), quality: ICON_QUALITY, variants, width, height };
 }
 
+/** The image drawn inside a width × height box, in the format of a file extension (for web sets). */
+export async function drawFile(buffer, { width, height }, extension) {
+  const image = fitted(buffer, width, height);
+  switch (extension.toLowerCase()) {
+    case '.png': return image.png().toBuffer();
+    case '.webp': return image.webp({ quality: Math.round(ICON_QUALITY * 100) }).toBuffer();
+    case '.jpg':
+    case '.jpeg': return image.flatten({ background: '#ffffff' }).jpeg({ quality: 90 }).toBuffer();
+    default: throw Object.assign(new Error(`Cannot write ${extension} files; use .png, .webp or .jpg`), { statusCode: 400 });
+  }
+}
+
 /** A small WebP of an image, for an assistant to look at before it chooses one. */
 export async function preview(buffer, size = PREVIEW_SIZE) {
   return fitted(buffer, size, size).webp({ quality: 70 }).toBuffer();

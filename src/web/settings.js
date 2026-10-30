@@ -302,7 +302,7 @@ function fillOptionForms() {
 function renderWebSets() {
   const list = draft.webSets;
   $('webSetList').replaceChildren(...list.map((set, index) => {
-    const text = (key, attributes = {}) => ctx.el('input', { type: 'text', value: set[key], spellcheck: 'false', ...attributes, oninput: event => { set[key] = event.target.value.trim(); } });
+    const text = (key, attributes = {}) => ctx.el('input', { type: 'text', value: set[key] ?? '', spellcheck: 'false', ...attributes, oninput: event => { set[key] = event.target.value.trim(); } });
     const number = key => ctx.el('input', { type: 'number', min: 16, max: 1024, value: set[key], oninput: event => { set[key] = Number(event.target.value); } });
     const result = ctx.el('p', { class: 'small' });
     return ctx.el('div', { class: 'style-item' }, [
@@ -315,6 +315,7 @@ function renderWebSets() {
         ctx.el('label', { class: 'label' }, [ctx.el('span', { text: t('gen.height') }), number('height')]),
         ctx.el('label', { class: 'label' }, [ctx.el('span', { text: t('set.extension') }), text('extension')])
       ]),
+      ctx.el('label', { class: 'label' }, [ctx.el('span', { text: t('web.folder') }), text('folder', { placeholder: '/icons/blue/100x100' })]),
       result,
       ctx.el('div', { class: 'row-buttons' }, [
         ctx.el('button', { type: 'button', class: 'small', onclick: () => testWebSet(set, result) }, [ctx.el('i', { class: 'fa fa-plug' }), ctx.el('span', { text: ` ${t('set.test')}` })]),

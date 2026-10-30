@@ -17,6 +17,16 @@ services:
     volumes:
       # Options, Proxmox hosts (with their token secrets), snapshots and the icon library.
       - proxmox-notes-data:/data
+      # Optional: the web server's icon folder, so AI icons can be saved straight into a web icon set.
+      # Give the set the folder in Settings → Icons → Web icon sets, for example /icons/blue/100x100.
+      # - web-icons:/icons
 
 volumes:
   proxmox-notes-data:
+  # The icon folder as an SMB share, for the optional mount above.
+  # web-icons:
+  #   driver: local
+  #   driver_opts:
+  #     type: cifs
+  #     device: //fileserver/WWW-Share/proxmox/icons
+  #     o: username=icons,password=change-me,uid=1000,gid=1000,vers=3.0

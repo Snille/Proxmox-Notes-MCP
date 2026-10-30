@@ -1,6 +1,10 @@
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import sharp from 'sharp';
 import { afterEach, describe, expect, it } from 'vitest';
-import { withDefaults } from '../src/options.mjs';
+import { optionsSchema, withDefaults } from '../src/options.mjs';
 import { keysFromListing, keysFromManifest, labelFromKey, WebSets } from '../src/websets.mjs';
 
 const servers = [];
@@ -77,5 +81,38 @@ describe('web icon sets', () => {
   it('takes the size of the old icon set from its folder name', () => {
     const iconSet = { baseUrl: 'https://icons.example.com/green/512x512/', width: 100, height: 100, extension: '.png' };
     expect(withDefaults({ iconSet }).webSets[0]).toMatchObject({ width: 512, height: 512 });
+  });
+
+  it('writes an icon into a set that has a folder, at the size of the set, and asks before replacing', async () => {
+    const folder = await mkdtemp(join(tmpdir(), 'websets-'));
+    try {
+      const set = { name: 'Blue', baseUrl: 'https://icons.example.com/blue/200x200', width: 200, height: 200, extension: '.png', folder: join(folder, '200x200') };
+      const options = withDefaults({ webSets: [set, { ...set, name: 'Read only', folder: '' }] });
+      const sets = new WebSets({ options: { get: () => options } });
+      const image = (await sharp({ create: { width: 60, height: 30, channels: 4, background: '#95c200' } }).png().toBuffer()).toString('base64');
+
+      const written = await sets.write(0, { key: 'prowlarr01', image });
+      expect(written).toEqual({ set: 'Blue', key: 'prowlarr01-', file: 'prowlarr01-200x200.png', url: 'https://icons.example.com/blue/200x200/prowlarr01-200x200.png', width: 200, height: 200 });
+      expect(await sharp(await readFile(join(set.folder, 'prowlarr01-200x200.png'))).metadata()).toMatchObject({ width: 200, height: 200, format: 'png' });
+
+      await expect(sets.write(0, { key: 'prowlarr01-', image })).rejects.toMatchObject({ statusCode: 409 });
+      await writeFile(join(set.folder, 'prowlarr01-200x200.png'), 'old');
+      await sets.write(0, { key: 'prowlarr01', image, replace: true });
+      expect((await readFile(join(set.folder, 'prowlarr01-200x200.png'))).subarray(1, 4).toString()).toBe('PNG');
+
+      await expect(sets.write(0, { key: '../evil', image })).rejects.toMatchObject({ statusCode: 400 });
+      await expect(sets.write(1, { key: 'prowlarr01', image })).rejects.toMatchObject({ statusCode: 400 });
+    } finally {
+      await rm(folder, { recursive: true, force: true });
+    }
+  });
+
+  it('accepts an absolute folder or none, and nothing else', () => {
+    const element = optionsSchema.shape.webSets.element;
+    const set = { name: 'Blue', baseUrl: 'https://icons.example.com/blue/100x100', width: 100, height: 100, extension: '.png' };
+    expect(element.safeParse(set).success).toBe(true);
+    expect(element.safeParse({ ...set, folder: '' }).success).toBe(true);
+    expect(element.safeParse({ ...set, folder: '/icons/blue/100x100' }).success).toBe(true);
+    expect(element.safeParse({ ...set, folder: 'icons/blue' }).success).toBe(false);
   });
 });
