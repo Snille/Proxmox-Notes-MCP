@@ -45,6 +45,8 @@ export const DEFAULT_OPTIONS = {
     mode: 'recipe',
     count: 4,
     timeoutSeconds: 300,
+    // Put before what the icon shows, after the styles. Empty puts nothing there.
+    subjectPrefix: 'Motif:',
     recipe: {
       unet: 'qwen_image_2512_fp8_e4m3fn.safetensors',
       lora: 'Wuli-Qwen-Image-2512-Turbo-LoRA-4steps-V1.0-bf16_ComfyUi.safetensors',
@@ -111,6 +113,7 @@ export const optionsSchema = z.object({
     mode: z.enum(['recipe', 'workflow']),
     count: z.number().int().min(1).max(4),
     timeoutSeconds: z.number().int().min(30).max(1800),
+    subjectPrefix: z.string().trim().max(100),
     recipe: z.object({
       unet: z.string().min(1),
       lora: z.string(),

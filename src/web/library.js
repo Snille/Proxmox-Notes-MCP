@@ -369,7 +369,7 @@ export function openIconDialog({ el, toast, size, images = [], mode = 'pick', ta
     const subject = $('genSubject').value.trim().replace(/[.\s]+$/, '');
     const ticked = tickedStyles();
     const parts = styles.filter(style => ticked.includes(style.name)).map(style => style.prompt.trim());
-    $('genPrompt').textContent = subject ? [...parts, `Motif: ${subject}.`].join(' ') : '';
+    $('genPrompt').textContent = subject ? [...parts, (generator.subjectPrefix ?? 'Motif:').trim(), `${subject}.`].filter(Boolean).join(' ') : '';
   };
 
   // Where a chosen AI image goes: the library, or the ticked web sets that have a folder. This

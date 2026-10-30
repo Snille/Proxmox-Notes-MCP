@@ -25,10 +25,10 @@ const MODEL_LOADERS = [
 // ---------- prompts and workflows ----------
 
 // The prompt: the texts of the ticked styles in their order, then what the icon shows.
-export function buildPrompt(styles, subject) {
+export function buildPrompt(styles, subject, prefix = 'Motif:') {
   const text = String(subject ?? '').trim().replace(/[.\s]+$/, '');
   if (!text) throw badRequest('Describe what the icon should show');
-  return [...styles.map(style => style.prompt.trim()), `Motif: ${text}.`].filter(Boolean).join(' ');
+  return [...styles.map(style => style.prompt.trim()), String(prefix ?? '').trim(), `${text}.`].filter(Boolean).join(' ');
 }
 
 /** The built-in recipe as a ComfyUI API workflow. `models` holds the names as the host lists them. */
@@ -288,7 +288,7 @@ export class Generator {
     const styles = Array.isArray(names)
       ? settings.styles.filter(style => names.includes(style.name))
       : settings.styles.filter(style => style.checked);
-    const prompt = buildPrompt(styles, subject);
+    const prompt = buildPrompt(styles, subject, settings.subjectPrefix);
     const images = Math.min(Math.max(Number(count) || settings.count, 1), 4);
     const seed = randomInt(1, 2 ** 47);
     const client = await this.pickHost(host);

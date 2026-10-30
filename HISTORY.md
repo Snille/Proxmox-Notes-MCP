@@ -1,5 +1,9 @@
 # History
 
+## 0.16.2 - 2026-10-30
+
+- The text put before what the icon shows in an AI prompt, "Motif:", is a setting: Settings → Image generator → Styles → **Text before what the icon shows**. It is "Motif:" from the start, so prompts stay as before; empty puts nothing there. Erik could not find where "Motif:" came from, since it was fixed in the code.
+
 ## 0.16.1 - 2026-10-30
 
 - Create with AI shows that a clicked image is saved. The image is marked **Saving…** and then **Saved** with a green frame, and the text next to Create says where it went (the library, or the files on the web server). Before, only a short message in the corner showed it, and it was easy to miss while the dialog stayed open. Erik's report.

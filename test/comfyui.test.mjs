@@ -86,6 +86,8 @@ describe('prompts and workflows', () => {
     const styles = [{ prompt: 'An icon. ' }, { prompt: 'Green frame.' }];
     expect(buildPrompt(styles, ' big drop of water. ')).toBe('An icon. Green frame. Motif: big drop of water.');
     expect(buildPrompt([], 'lamp')).toBe('Motif: lamp.');
+    expect(buildPrompt(styles, 'lamp', 'Subject:')).toBe('An icon. Green frame. Subject: lamp.');
+    expect(buildPrompt(styles, 'lamp', '')).toBe('An icon. Green frame. lamp.');
     expect(() => buildPrompt(styles, '  ')).toThrow(/Describe/);
   });
 

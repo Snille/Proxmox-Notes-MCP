@@ -357,6 +357,7 @@ function fillGenerator() {
   $('genWorkflow').value = generator.workflow;
   $('genDefaultCount').value = generator.count;
   $('genTimeout').value = generator.timeoutSeconds;
+  $('genSubjectPrefix').value = generator.subjectPrefix;
   $('genTestResult').replaceChildren();
   showGeneratorMode();
   renderStyles();
@@ -379,6 +380,7 @@ function collectGenerator() {
     mode: document.querySelector('input[name="genMode"]:checked')?.value ?? 'recipe',
     count: Number($('genDefaultCount').value),
     timeoutSeconds: Number($('genTimeout').value),
+    subjectPrefix: $('genSubjectPrefix').value.trim(),
     recipe,
     workflow: $('genWorkflow').value.trim(),
     styles: draft.generator.styles

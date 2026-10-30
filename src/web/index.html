@@ -307,7 +307,8 @@ pvenode cert info</pre>
       </fieldset>
       <fieldset>
         <legend data-i18n="gen.styles">Styles</legend>
-        <p class="small" data-i18n="gen.stylesHelp">Styles are ticked in the Create with AI dialog. Each ticked style adds its text to the prompt, in this order, and what the icon shows comes last.</p>
+        <p class="small" data-i18n="gen.stylesHelp">Styles are ticked in the Create with AI dialog. Each ticked style adds its text to the prompt, in this order, and what the icon shows comes last, after the text below.</p>
+        <label class="label"><span data-i18n="gen.subjectPrefix">Text before what the icon shows (empty for none)</span><input id="genSubjectPrefix" type="text" spellcheck="false" placeholder="Motif:"></label>
         <div id="genStyles"></div>
         <div class="row-buttons">
           <button id="btnAddStyle" type="button"><i class="fa fa-plus"></i> <span data-i18n="gen.addStyle">Add style</span></button>
