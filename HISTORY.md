@@ -1,5 +1,9 @@
 # History
 
+## 0.16.3 - 2026-11-05
+
+- A new favicon in the same look as Erik's other services: a Leonardo da Vinci ink and sepia sketch of an open notebook with a small server rack on its pages, in a round parchment medallion. It replaces the blue-framed robot. The file names are the same; `apple-touch-icon.png` is still drawn on the dark theme's background.
+
 ## 0.16.2 - 2026-10-30
 
 - The text put before what the icon shows in an AI prompt, "Motif:", is a setting: Settings → Image generator → Styles → **Text before what the icon shows**. It is "Motif:" from the start, so prompts stay as before; empty puts nothing there. Erik could not find where "Motif:" came from, since it was fixed in the code.
