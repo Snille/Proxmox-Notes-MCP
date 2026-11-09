@@ -115,21 +115,31 @@ export class WebSets {
     return result;
   }
 
-  /**
-   * Writes an image into set number `index`, drawn at the set's size, as
-   * <folder>/<key><width>x<height><extension>. An existing file is only replaced with `replace`.
-   */
-  async write(index, { key, image, replace = false }) {
+  /** Where `key` goes in set number `index`: the set, the key with its "-", the file name and path. */
+  target(index, key) {
     const set = this.set(index);
     if (!set.folder) throw Object.assign(new Error(`The web set ${set.name} has no folder to write to`), { statusCode: 400 });
     const fileKey = String(key ?? '').trim().replace(/-*$/, '-');
     if (!/^\w[\w.-]*-$/.test(fileKey)) throw Object.assign(new Error('A file name (key) has only letters, digits, ".", "_" and "-", for example prowlarr01'), { statusCode: 400 });
     const name = `${fileKey}${set.width}x${set.height}${set.extension}`;
-    const file = join(set.folder, name);
-    if (!replace && await access(file).then(() => true, () => false)) {
+    return { set, fileKey, name, file: join(set.folder, name) };
+  }
+
+  /** Whether `key` already has a file in set number `index`. */
+  async exists(index, key) {
+    return access(this.target(index, key).file).then(() => true, () => false);
+  }
+
+  /**
+   * Writes an image into set number `index`, drawn at the set's size, as
+   * <folder>/<key><width>x<height><extension>. An existing file is only replaced with `replace`.
+   */
+  async write(index, { key, image, replace = false }) {
+    const { set, fileKey, name, file } = this.target(index, key);
+    if (!replace && await this.exists(index, key)) {
       throw Object.assign(new Error(`${name} is already in ${set.name}`), { statusCode: 409, exists: name });
     }
-    const data = await drawFile(Buffer.from(String(image ?? ''), 'base64'), set, set.extension);
+    const data = await drawFile(Buffer.isBuffer(image) ? image : Buffer.from(String(image ?? ''), 'base64'), set, set.extension);
     const temporary = `${file}.${process.pid}.tmp`;
     try {
       await mkdir(set.folder, { recursive: true });

@@ -89,7 +89,19 @@ const MAX_ORIGINAL_BYTES = 8_000_000;
 
 const noGenerator = () => Object.assign(new Error('Icon generation is not set up in this instance'), { statusCode: 400 });
 
-export function buildTools({ options, proxmox, snapshots, icons, generator }) {
+// Finds web sets by number or name (case does not matter); unknown ones are refused with the list.
+function pickWebSets(all, wanted) {
+  const known = all.map((set, index) => `${index}: ${set.name}${set.folder ? '' : ' (no folder)'}`).join(', ');
+  const indexes = [...new Set(wanted.map(item => {
+    const index = typeof item === 'number' ? item : all.findIndex(set => set.name.toLowerCase() === String(item).trim().toLowerCase());
+    if (!all[index]) throw Object.assign(new Error(`Unknown web set "${item}". Known: ${known || 'none'}`), { statusCode: 400 });
+    if (!all[index].folder) throw Object.assign(new Error(`The web set ${all[index].name} has no folder to write to. Known: ${known}`), { statusCode: 400 });
+    return index;
+  }))];
+  return indexes;
+}
+
+export function buildTools({ options, proxmox, snapshots, icons, generator, webSets }) {
   // Previews of a finished generation, made once: the trimmed image, as the icon will show it.
   const previews = new Map();
   const previewsOf = async job => {
@@ -278,6 +290,44 @@ export function buildTools({ options, proxmox, snapshots, icons, generator }) {
           replace
         });
         return { icon };
+      }
+    },
+    {
+      name: 'notes_icon_web_save',
+      title: 'Save an icon on the web server',
+      description: 'Write an icon from the library into web icon sets that have a folder (see "webSets" in notes_options), as the web GUI\'s "Save to → Web server" does: the original image (trimmed when it was made with AI) is drawn at each set\'s size as <key>-<width>x<height><extension>. Use it so a Note can link to the icon on the web server like the other Notes on the host, instead of embedding it. Pick the sets with the same colour as the other icons on the host, usually all sizes of it. Nothing is written when a file is already there, unless replace is set. Returns the written files and "noteImage", ready for the "image" of a Note.',
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      inputSchema: z.object({
+        icon: z.string().regex(/^[a-z0-9][a-z0-9-]*$/).describe('Icon id from notes_icons'),
+        sets: z.array(z.union([z.number().int().min(0), z.string().min(1)])).min(1).describe('Web sets by number or name, for example ["Blue 100", "Blue 200", "Blue 512"]'),
+        key: z.string().optional().describe('File name before the size, for example "loramanager01" (default: the icon id)'),
+        replace: z.boolean().default(false).describe('Replace files that are already there')
+      }).strict(),
+      handler: async ({ icon: id, sets, key, replace }) => {
+        if (!icons) throw Object.assign(new Error('There is no icon library in this setup'), { statusCode: 400 });
+        if (!webSets) throw Object.assign(new Error('Web icon sets are not set up in this instance'), { statusCode: 400 });
+        const indexes = pickWebSets(options.get().webSets ?? [], sets);
+        const fileKey = key ?? id;
+        // Check every set first, so nothing is written when one file is in the way.
+        const existing = [];
+        for (const index of indexes) {
+          if (await webSets.exists(index, fileKey)) existing.push(`${webSets.target(index, fileKey).name} in ${webSets.set(index).name}`);
+        }
+        if (existing.length && !replace) {
+          throw Object.assign(new Error(`Already there: ${existing.join(', ')}. Nothing was written; set replace to replace them, or choose another key.`), { statusCode: 409 });
+        }
+        const { icon, data } = await icons.readOriginal(id);
+        const image = icon.generation ? await trimTransparent(data) : data;
+        const written = [];
+        for (const index of indexes) written.push(await webSets.write(index, { key: fileKey, image, replace }));
+        const { width } = options.get().iconSet;
+        const chosen = written.find(file => file.width === width) ?? [...written].sort((a, b) => a.width - b.width)[0];
+        log({ message: 'icon saved on web server', icon: id, files: written.map(file => file.url) });
+        return {
+          written,
+          replaced: existing,
+          noteImage: { src: chosen.url, width: chosen.width, height: chosen.height, key: chosen.key }
+        };
       }
     },
     {

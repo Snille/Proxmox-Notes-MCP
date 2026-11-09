@@ -8,6 +8,7 @@ import { Proxmox } from './proxmox/index.mjs';
 import { IconStore } from './icons.mjs';
 import { Generator } from './comfyui.mjs';
 import { SnapshotStore } from './snapshots.mjs';
+import { WebSets } from './websets.mjs';
 import { buildTools } from './tools.mjs';
 
 const settings = loadSettings();
@@ -15,5 +16,5 @@ const options = await OptionsStore.open(settings.dataDir);
 const proxmox = await Proxmox.open(settings.targetsFile);
 const snapshots = new SnapshotStore(settings.dataDir);
 const icons = await IconStore.open(settings.dataDir);
-const tools = buildTools({ options, proxmox, snapshots, icons, generator: new Generator({ options }) });
+const tools = buildTools({ options, proxmox, snapshots, icons, generator: new Generator({ options }), webSets: new WebSets({ options }) });
 serveStdio(() => createMcpServer(tools));

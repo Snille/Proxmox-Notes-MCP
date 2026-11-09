@@ -10,6 +10,7 @@ import { drawIcon, trimTransparent } from '../src/imaging.mjs';
 import { toolResult } from '../src/mcp.mjs';
 import { withDefaults } from '../src/options.mjs';
 import { SnapshotStore } from '../src/snapshots.mjs';
+import { WebSets } from '../src/websets.mjs';
 import { buildTools, executeTool } from '../src/tools.mjs';
 
 // A generated icon after background removal: a coloured block on a large transparent canvas.
@@ -79,12 +80,17 @@ describe('AI icons over MCP', () => {
     const dataDir = await mkdtemp(join(tmpdir(), 'proxmox-notes-ai-'));
     const url = await fakeComfy(await generatedPng());
     const workflow = { 1: { class_type: 'CLIPTextEncode', inputs: { text: '{{prompt}}' } }, 9: { class_type: 'PreviewImage', inputs: { images: ['1', 0] } } };
-    const options = withDefaults({ generator: { hosts: [url], mode: 'workflow', workflow: JSON.stringify(workflow) } });
+    const set = (name, size, folder) => ({ name, baseUrl: `https://icons.example.com/blue/${size}x${size}`, width: size, height: size, extension: '.png', ...(folder ? { folder: join(dataDir, 'web', `${size}`) } : {}) });
+    const options = withDefaults({
+      generator: { hosts: [url], mode: 'workflow', workflow: JSON.stringify(workflow) },
+      webSets: [set('Blue 100', 100, true), set('Blue 512', 512, true), set('Blue 200', 200, false)]
+    });
     const icons = await IconStore.open(dataDir);
     const generator = new Generator({ options: { get: () => options }, pollMs: 5 });
-    const tools = buildTools({ options: { get: () => options, source: 'test' }, proxmox: { hosts: () => [] }, snapshots: new SnapshotStore(dataDir), icons, generator });
+    const webSets = new WebSets({ options: { get: () => options } });
+    const tools = buildTools({ options: { get: () => options, source: 'test' }, proxmox: { hosts: () => [] }, snapshots: new SnapshotStore(dataDir), icons, generator, webSets });
     const run = (name, args) => executeTool(tools.find(tool => tool.name === name), args);
-    return { run, icons, options };
+    return { run, icons, options, dataDir };
   }
 
   async function done(run, id) {
@@ -131,6 +137,35 @@ describe('AI icons over MCP', () => {
     const started = await run('notes_icon_generate', { subject: 'x', count: 1 });
     await done(run, started.id);
     await expect(run('notes_icon_keep', { id: started.id, image: 2, label: 'X' })).rejects.toThrow(/No such image/);
+  });
+
+  it('saves a kept AI icon in web sets, trimmed, and refuses to overwrite without replace', async () => {
+    const { run, dataDir } = await setup();
+    const started = await run('notes_icon_generate', { subject: 'a lora library', count: 1 });
+    await done(run, started.id);
+    await run('notes_icon_keep', { id: started.id, image: 0, label: 'LoraManager01' });
+
+    const saved = await run('notes_icon_web_save', { icon: 'loramanager01', sets: ['blue 100', 1] });
+    expect(saved.written.map(file => file.file)).toEqual(['loramanager01-100x100.png', 'loramanager01-512x512.png']);
+    expect(saved.noteImage).toEqual({ src: 'https://icons.example.com/blue/100x100/loramanager01-100x100.png', width: 100, height: 100, key: 'loramanager01-' });
+    // Trimmed: the 300x200 block fills the width of the square, so the top row is transparent.
+    const big = await sharp(join(dataDir, 'web', '512', 'loramanager01-512x512.png')).raw().toBuffer({ resolveWithObject: true });
+    expect(big.info).toMatchObject({ width: 512, height: 512 });
+    const pixel = (x, y) => big.data[(y * 512 + x) * big.info.channels + 3];
+    expect(pixel(256, 0)).toBe(0);
+    expect(pixel(20, 256)).toBe(255);
+
+    await expect(run('notes_icon_web_save', { icon: 'loramanager01', sets: [0, 1] })).rejects.toThrow(/Already there: loramanager01-100x100.png in Blue 100, loramanager01-512x512.png in Blue 512\. Nothing was written/);
+    const again = await run('notes_icon_web_save', { icon: 'loramanager01', sets: [0], replace: true });
+    expect(again.replaced).toEqual(['loramanager01-100x100.png in Blue 100']);
+  });
+
+  it('refuses unknown web sets and sets without a folder before writing anything', async () => {
+    const { run, icons } = await setup();
+    await icons.add({ label: 'Plain', webp: (await drawIcon(await generatedPng(), { width: 100, height: 100 })).webp });
+    await expect(run('notes_icon_web_save', { icon: 'plain', sets: ['Green 100'] })).rejects.toThrow(/Unknown web set "Green 100". Known: 0: Blue 100, 1: Blue 512, 2: Blue 200 \(no folder\)/);
+    await expect(run('notes_icon_web_save', { icon: 'plain', sets: ['Blue 200'] })).rejects.toThrow(/Blue 200 has no folder/);
+    await expect(run('notes_icon_web_save', { icon: 'nope', sets: [0] })).rejects.toThrow(/not in the library/);
   });
 
   it('says so when there is no generator', async () => {

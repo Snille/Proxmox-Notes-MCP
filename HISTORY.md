@@ -1,5 +1,10 @@
 # History
 
+## 0.17.0 - 2026-11-09
+
+- New MCP tool `notes_icon_web_save`: it writes a library icon into web icon sets that have a folder, as **Create with AI → Save to → Web server** does in the GUI. The sets are given by number or name (`["Blue 100", "Blue 200", "Blue 512"]`); the original image, trimmed when it was made with AI, is drawn at each set's size as `<key>-<width>x<height><extension>`. Every set is checked first, so nothing is written when one file is already there, unless `replace` is set. The result has `noteImage`, ready for the image of a Note that links to the web server. Erik's request: an assistant made the Note for TowerCube CT 117 (LoraManager01) over MCP, but had to save its icon on the web server by hand with the HTTP API and its own trim script.
+- `WebSets` has `target()` and `exists()`, and `write()` also takes the image as a Buffer.
+
 ## 0.16.3 - 2026-11-05
 
 - A new favicon in the same look as Erik's other services: a Leonardo da Vinci ink and sepia sketch of an open notebook with a small server rack on its pages, in a round parchment medallion. It replaces the blue-framed robot. The file names are the same; `apple-touch-icon.png` is still drawn on the dark theme's background.
