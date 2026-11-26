@@ -1,5 +1,9 @@
 # History
 
+## 0.17.1 - 2026-11-26
+
+- Security: dependency updates that clear every `npm audit` finding. `@modelcontextprotocol/server` 2.2.0 → 2.4.0 (one oversized HTTP request could exhaust memory, messages could reach the wrong client on a shared transport, and bearer auth accepted tokens issued for another service), `zod` 4.5.4 → 4.6.7 (memory exhaustion on oversized constrained collections), `@modelcontextprotocol/node` 2.1.0 → 2.1.2, and `hono`, which the SDK pulls in. Dev only: `@modelcontextprotocol/client` 2.2.0 → 2.4.0 and `vitest` 4.1.11 → 4.1.12. The M8ven Trust Index graded the server C for the three high findings.
+
 ## 0.17.0 - 2026-11-09
 
 - New MCP tool `notes_icon_web_save`: it writes a library icon into web icon sets that have a folder, as **Create with AI → Save to → Web server** does in the GUI. The sets are given by number or name (`["Blue 100", "Blue 200", "Blue 512"]`); the original image, trimmed when it was made with AI, is drawn at each set's size as `<key>-<width>x<height><extension>`. Every set is checked first, so nothing is written when one file is already there, unless `replace` is set. The result has `noteImage`, ready for the image of a Note that links to the web server. Erik's request: an assistant made the Note for TowerCube CT 117 (LoraManager01) over MCP, but had to save its icon on the web server by hand with the HTTP API and its own trim script.
