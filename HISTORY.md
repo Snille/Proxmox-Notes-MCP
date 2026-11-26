@@ -1,5 +1,9 @@
 # History
 
+## 0.17.2 - 2026-11-26
+
+- Every MCP tool declares all four hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) as booleans. Twelve tools that only work on local data (the library, snapshots, options, rendering and parsing) had no `openWorldHint`; they now say `false`. Directories such as OpenAI's reject a tool with a missing hint, and the M8ven Trust Index marked it as a failure. A test checks all four hints on every tool.
+
 ## 0.17.1 - 2026-11-26
 
 - Security: dependency updates that clear every `npm audit` finding. `@modelcontextprotocol/server` 2.2.0 → 2.4.0 (one oversized HTTP request could exhaust memory, messages could reach the wrong client on a shared transport, and bearer auth accepted tokens issued for another service), `zod` 4.5.4 → 4.6.7 (memory exhaustion on oversized constrained collections), `@modelcontextprotocol/node` 2.1.0 → 2.1.2, and `hono`, which the SDK pulls in. Dev only: `@modelcontextprotocol/client` 2.2.0 → 2.4.0 and `vitest` 4.1.11 → 4.1.12. The M8ven Trust Index graded the server C for the three high findings.

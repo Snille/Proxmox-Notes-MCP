@@ -122,6 +122,12 @@ describe('MCP', () => {
     await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/mcp`)));
     const { tools } = await client.listTools();
     expect(tools.map(t => t.name).sort()).toEqual(['notes_guests', 'notes_hosts', 'notes_icon_generate', 'notes_icon_generation', 'notes_icon_keep', 'notes_icon_web_save', 'notes_icons', 'notes_import_legacy', 'notes_new', 'notes_options', 'notes_parse', 'notes_prefill', 'notes_prepare_write', 'notes_read', 'notes_render', 'notes_snapshot', 'notes_snapshots', 'notes_status', 'notes_write_confirmed']);
+    // Directories such as OpenAI's reject a tool when any of the four hints is missing or not a boolean.
+    for (const tool of tools) {
+      for (const hint of ['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint']) {
+        expect(typeof tool.annotations?.[hint], `${tool.name}.${hint}`).toBe('boolean');
+      }
+    }
     const result = await client.callTool({ name: 'notes_new', arguments: { title: 'Test' } });
     expect(result.structuredContent.doc.title).toBe('Test');
     await client.close();

@@ -173,7 +173,7 @@ export function buildTools({ options, proxmox, snapshots, icons, generator, webS
       name: 'notes_status',
       title: 'Service status',
       description: 'Show the service version and where its options come from.',
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       inputSchema: z.object({}).strict(),
       handler: async () => ({
         service: 'proxmox-notes',
@@ -187,7 +187,7 @@ export function buildTools({ options, proxmox, snapshots, icons, generator, webS
       name: 'notes_options',
       title: 'Form options',
       description: 'Return the choices for a Note: heading icons, icon-set images, OS names and the template for a new Note.',
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       inputSchema: z.object({}).strict(),
       handler: async () => options.get()
     },
@@ -195,7 +195,7 @@ export function buildTools({ options, proxmox, snapshots, icons, generator, webS
       name: 'notes_new',
       title: 'New Note',
       description: 'Create a new Note document from the instance template, optionally with an icon from the library (see notes_icons), embedded in the Note. Nothing is written to Proxmox.',
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       inputSchema: z.object({
         title: z.string().default(''),
         headerIcon: z.string().optional(),
@@ -209,7 +209,7 @@ export function buildTools({ options, proxmox, snapshots, icons, generator, webS
       name: 'notes_icons',
       title: 'Icon library',
       description: 'List the icons in the library (id and name; for an icon made with AI also the styles it was made with). Pass an id as "icon" to notes_new or notes_prefill to embed it in a Note. When no icon fits, make one with notes_icon_generate.',
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       inputSchema: z.object({ search: z.string().optional() }).strict(),
       handler: async ({ search }) => {
         const words = String(search ?? '').toLowerCase().split(/\s+/).filter(Boolean);
@@ -249,7 +249,7 @@ export function buildTools({ options, proxmox, snapshots, icons, generator, webS
       name: 'notes_icon_generation',
       title: 'Follow an AI icon',
       description: 'Show the state of a generation from notes_icon_generate: "queued", "running", "done" or "error". When done, the images are returned as small previews (trimmed, as the icon will look), numbered from 0. Show them to the user or choose the one that fits, then call notes_icon_keep with its number. Generations are kept for 30 minutes.',
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       inputSchema: z.object({ id: generationIdSchema, previews: z.boolean().default(true).describe('Return the previews when done') }).strict(),
       handler: async ({ id, previews: wanted }) => {
         if (!generator) throw noGenerator();
@@ -266,7 +266,7 @@ export function buildTools({ options, proxmox, snapshots, icons, generator, webS
       name: 'notes_icon_keep',
       title: 'Keep an AI icon',
       description: 'Add one image of a finished generation to the icon library: its transparent border is trimmed and it is drawn at the instance\'s icon size as WebP (with smaller copies, so a Note can fit), keeping the prompt, styles and seed. Returns the library icon; pass its id as "icon" to notes_new or notes_prefill. With replace, an icon with the same name is replaced instead of adding a copy.',
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
       inputSchema: z.object({
         id: generationIdSchema,
         image: z.number().int().min(0).max(3).describe('Image number from notes_icon_generation'),
@@ -334,7 +334,7 @@ export function buildTools({ options, proxmox, snapshots, icons, generator, webS
       name: 'notes_hosts',
       title: 'Proxmox hosts',
       description: 'List the Proxmox hosts this instance manages. Token secrets are never shown.',
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       inputSchema: z.object({}).strict(),
       handler: async () => ({ hosts: proxmox.hosts() })
     },
@@ -479,7 +479,7 @@ export function buildTools({ options, proxmox, snapshots, icons, generator, webS
       name: 'notes_snapshots',
       title: 'Snapshots of a guest\'s Notes',
       description: 'List the snapshots kept for one guest, newest first. A snapshot is the Notes as they were just before a write.',
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       inputSchema: z.object({ host: hostSchema, vmid: vmidSchema }).strict(),
       handler: async ({ host, vmid }) => ({ host, vmid, snapshots: await snapshots.list(host, vmid) })
     },
@@ -487,7 +487,7 @@ export function buildTools({ options, proxmox, snapshots, icons, generator, webS
       name: 'notes_snapshot',
       title: 'Read a snapshot',
       description: 'Read one snapshot: the Notes text and the parsed document. To restore it, pass its text to notes_prepare_write as markdown.',
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       inputSchema: z.object({ host: hostSchema, vmid: vmidSchema, id: z.string() }).strict(),
       handler: async ({ host, vmid, id }) => {
         const snapshot = await snapshots.read(host, vmid, id);
@@ -498,7 +498,7 @@ export function buildTools({ options, proxmox, snapshots, icons, generator, webS
       name: 'notes_render',
       title: 'Render a Note',
       description: 'Turn a Note document into the Markdown Proxmox shows, and check it against the 8192-character limit. When the Note is too long and its image is an embedded library icon, a smaller copy of the icon is put in when that makes it fit, as notes_prepare_write does; "icon" then says so and "doc" is the changed document. Nothing is written to Proxmox.',
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       inputSchema: z.object({ doc: documentSchema, layout: layoutSchema }).strict(),
       handler: async ({ doc, layout }) => {
         const chosen = layout ?? options.get().layout ?? DEFAULT_LAYOUT;
@@ -511,7 +511,7 @@ export function buildTools({ options, proxmox, snapshots, icons, generator, webS
       name: 'notes_parse',
       title: 'Parse a Note',
       description: 'Read Notes Markdown into a Note document. Returns ok=false with the line number when the text does not follow the format; the text is then best edited as raw text.',
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       inputSchema: z.object({ markdown: z.string() }).strict(),
       handler: async ({ markdown }) => parseNotes(markdown)
     },
@@ -519,7 +519,7 @@ export function buildTools({ options, proxmox, snapshots, icons, generator, webS
       name: 'notes_import_legacy',
       title: 'Import a Notes Generator file',
       description: 'Convert a JSON file saved by the original Proxmox Notes Generator into a Note document.',
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       inputSchema: z.object({ saved: z.record(z.string(), z.unknown()) }).strict(),
       handler: async ({ saved }) => {
         const { iconSet } = options.get();
