@@ -10,6 +10,7 @@ import * as z from 'zod';
 import { fromLegacySelect, iconSetUrl, optionsSchema, withDefaults } from './options.mjs';
 import { fetchCertificate, testTarget } from './proxmox/client.mjs';
 import { resolveTarget } from './proxmox/targets.mjs';
+import { createRateLimiter, isRateLimited } from './ratelimit.mjs';
 import { executeTool } from './tools.mjs';
 import { version } from './version.mjs';
 
@@ -265,6 +266,7 @@ export function createNotesServer({ settings, options, tools, proxmox, icons, ge
   const toolMap = new Map(tools.map(tool => [tool.name, tool]));
   const validateHost = settings.allowedHosts.length ? hostHeaderValidation(settings.allowedHosts) : null;
   const mcp = createMcpNodeHandler(tools);
+  const limiter = createRateLimiter({ perMinute: settings.rateLimit });
 
   const server = createServer(async (req, res) => {
     if (validateHost && !validateHost(req, res)) {
@@ -275,6 +277,14 @@ export function createNotesServer({ settings, options, tools, proxmox, icons, ge
       return;
     }
     const url = new URL(req.url ?? '/', 'http://localhost');
+    if (isRateLimited(url.pathname, req.method)) {
+      const { allowed, retryAfter } = limiter.take(req.socket.remoteAddress ?? 'unknown');
+      if (!allowed) {
+        res.writeHead(429, { 'content-type': 'application/json; charset=utf-8', 'retry-after': String(retryAfter), ...SECURITY_HEADERS });
+        res.end(JSON.stringify({ error: 'Too many requests' }));
+        return;
+      }
+    }
     try {
       if (req.method === 'GET' && url.pathname === '/health/live') {
         sendJson(res, 200, { ok: true, version });

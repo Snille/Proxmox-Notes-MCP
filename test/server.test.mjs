@@ -115,6 +115,20 @@ describe('options', () => {
   });
 });
 
+describe('rate limit', () => {
+  it('answers 429 with Retry-After when a client sends too many API requests', async () => {
+    const { base } = await start({ RATE_LIMIT: '2' });
+    expect((await fetch(`${base}/api/options`)).status).toBe(200);
+    expect((await fetch(`${base}/api/options`)).status).toBe(200);
+    const refused = await fetch(`${base}/api/options`);
+    expect(refused.status).toBe(429);
+    expect(Number(refused.headers.get('retry-after'))).toBeGreaterThan(0);
+    // The web GUI and the health check are not counted.
+    expect((await fetch(`${base}/health/live`)).status).toBe(200);
+    expect((await fetch(`${base}/`)).status).toBe(200);
+  });
+});
+
 describe('MCP', () => {
   it('lists the tools and renders a Note', async () => {
     const { base } = await start();

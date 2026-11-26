@@ -28,6 +28,7 @@ server.listen(settings.port, settings.host, () => {
     optionsSource: options.source,
     proxmoxHosts: proxmox.hosts().map(h => `${h.id} (${h.tls})`),
     mcpToken: settings.mcpToken ? 'set' : 'not set',
+    rateLimit: settings.rateLimit ? `${settings.rateLimit}/min` : 'off',
     allowedHosts: settings.allowedHosts
   }));
 });

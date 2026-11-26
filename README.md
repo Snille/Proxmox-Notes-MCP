@@ -148,6 +148,7 @@ All settings are environment variables:
 | `TARGETS_FILE` | `$DATA_DIR/targets.json` | The Proxmox hosts and their tokens |
 | `ALLOWED_HOSTS` | empty (any) | Comma-separated host names the service answers to, for example `notes.example.com`. Recommended behind a reverse proxy. |
 | `MCP_TOKEN` | empty (none) | When set, `/mcp` needs `Authorization: Bearer <token>`. Use it when the proxy lets `/mcp` through without its own login, because MCP clients cannot do a browser login. |
+| `RATE_LIMIT` | `600` | Requests per minute per client address to `/api` and `/mcp` (icon images are not counted). A client may use them in one burst; then they refill evenly. Too many get HTTP 429 with `Retry-After`. Behind a reverse proxy all users share one limit, because the proxy is the client. `0` turns it off. |
 
 The service has no login of its own. Never expose it without a reverse proxy that has authentication. Requests from a web page on another site are refused (`Origin` check), so a logged-in browser cannot be used against it by another page.
 
@@ -233,6 +234,10 @@ The workflow checks that the tag matches `package.json`, runs the tests, builds 
 Open question: the project name (this could become the next major version of `Snille/Proxmox-Notes`).
 
 History: [HISTORY.md](HISTORY.md).
+
+## Privacy
+
+The service sends nothing to the author: no telemetry, no update check. It talks only to the Proxmox hosts, ComfyUI hosts and icon sets you configure, and to cdn.jsdelivr.net when you search the open dashboard-icons set. See [PRIVACY.md](PRIVACY.md) for what it stores and where data goes.
 
 ## Licence
 

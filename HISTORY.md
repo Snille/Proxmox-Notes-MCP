@@ -1,5 +1,10 @@
 # History
 
+## 0.18.0 - 2026-11-26
+
+- Rate limiting for `/api` and `/mcp`: each client address may send `RATE_LIMIT` requests per minute (600 by default) in one burst, then they refill evenly. Too many get HTTP 429 with `Retry-After`. Icon images, the web GUI's files and `/health/live` are not counted, so a large icon set still loads. Behind a reverse proxy all users share one limit, because the proxy is the client; `X-Forwarded-For` is not trusted, since it can be forged. `RATE_LIMIT=0` turns it off. The start-up log shows the limit.
+- `PRIVACY.md`: what an instance stores, where it sends data, and that nothing goes to the author. The README links to it. The M8ven Trust Index noted that both were missing; directories such as Claude's and OpenAI's ask for a privacy policy.
+
 ## 0.17.2 - 2026-11-26
 
 - Every MCP tool declares all four hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) as booleans. Twelve tools that only work on local data (the library, snapshots, options, rendering and parsing) had no `openWorldHint`; they now say `false`. Directories such as OpenAI's reject a tool with a missing hint, and the M8ven Trust Index marked it as a failure. A test checks all four hints on every tool.

@@ -12,6 +12,8 @@ export function loadSettings(env = process.env) {
     // Host names the service answers to, for example "notes.example.com". Empty accepts any host.
     allowedHosts: list(env.ALLOWED_HOSTS),
     // When set, /mcp needs "Authorization: Bearer <token>". Use it when the reverse proxy lets /mcp through without its own login.
-    mcpToken: env.MCP_TOKEN || ''
+    mcpToken: env.MCP_TOKEN || '',
+    // Requests per minute per client address to /api and /mcp, as a burst that refills evenly. 0 turns it off.
+    rateLimit: env.RATE_LIMIT === undefined || env.RATE_LIMIT === '' ? 600 : Math.max(0, Number(env.RATE_LIMIT) || 0)
   };
 }
