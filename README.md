@@ -237,3 +237,5 @@ History: [HISTORY.md](HISTORY.md).
 ## Licence
 
 MIT, see [LICENSE](LICENSE). The bundled Font Awesome 4.7 has its own licence (font: SIL OFL 1.1, CSS: MIT).
+
+[![M8ven Verified](https://m8ven.ai/badge/mcp/snille-proxmox-notes-mcp-1kf9b2?variant=verified&v=b89df76c24209d03b37decf2dd261edd)](https://m8ven.ai/mcp/snille-proxmox-notes-mcp-1kf9b2?s=readme)
